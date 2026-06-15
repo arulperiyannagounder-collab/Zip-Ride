@@ -1,0 +1,6 @@
+{
+  "name": "ZipRide Console",
+  "description": "Comprehensive bike taxi operations with booking, live tracking, telemetry monitoring, and RAG-grounded geographic cities search capabilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
