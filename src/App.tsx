@@ -18,7 +18,7 @@ import DisputesView from './components/DisputesView';
 import FarePolicyView from './components/FarePolicyView';
 import LoginView from './components/LoginView';
 import NotFoundView from './components/NotFoundView';
-import { SystemState, Ride, Dispute, SystemConfig } from './types';
+import { SystemState, Ride, Dispute, SystemConfig, Driver } from './types';
 
 export default function App() {
   // Path Router Configuration matching precisely /login, /, /booking, etc.
@@ -51,6 +51,7 @@ export default function App() {
   });
   const [allRides, setAllRides] = useState<Ride[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [allDrivers, setAllDrivers] = useState<Driver[]>([]);
 
   // Derived states
   const activeRide = allRides.find(r => ['booked', 'assigned', 'pickup', 'en_route', 'anomaly'].includes(r.status)) || null;
@@ -59,10 +60,11 @@ export default function App() {
   const fetchAllData = async (silent = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const [stateRes, ridesRes, disputesRes] = await Promise.all([
+      const [stateRes, ridesRes, disputesRes, driversRes] = await Promise.all([
         fetch('/api/system-state'),
         fetch('/api/rides'),
-        fetch('/api/disputes')
+        fetch('/api/disputes'),
+        fetch('/api/drivers')
       ]);
 
       if (stateRes.ok && ridesRes.ok && disputesRes.ok) {
@@ -73,6 +75,10 @@ export default function App() {
         setSystemState(stateData);
         setAllRides(ridesData);
         setDisputes(disputesData);
+        if (driversRes.ok) {
+          const driversData = await driversRes.json();
+          setAllDrivers(driversData);
+        }
         setIsServerConnected(true);
       } else {
         setIsServerConnected(false);
@@ -192,6 +198,32 @@ export default function App() {
     });
     if (res.ok) {
       await fetchAllData(true);
+    }
+  };
+
+  // 9. PUSH DRIVER LOCATION
+  const handlePushDriverLocation = async (rideId: string, lat: number, lng: number) => {
+    try {
+      await fetch(`/api/rides/${rideId}/driver-location`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng })
+      });
+    } catch (e) {
+      console.warn('Driver location push failed:', e);
+    }
+  };
+
+  // 10. PUSH RIDER LOCATION
+  const handlePushRiderLocation = async (rideId: string, lat: number, lng: number) => {
+    try {
+      await fetch(`/api/rides/${rideId}/rider-location`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng })
+      });
+    } catch (e) {
+      console.warn('Rider location push failed:', e);
     }
   };
 
@@ -361,6 +393,8 @@ export default function App() {
               onCompleteRide={handleCompleteRide}
               onRefresh={fetchAllData}
               systemConfig={systemState.config}
+              drivers={allDrivers}
+              onPushDriverLocation={handlePushDriverLocation}
             />
           )}
 
@@ -369,6 +403,8 @@ export default function App() {
               activeRide={activeRide}
               onRefresh={fetchAllData}
               onFileDispute={handleFileDispute}
+              drivers={allDrivers}
+              onPushRiderLocation={handlePushRiderLocation}
             />
           )}
 

@@ -1,9 +1,19 @@
 export interface Driver {
   id: string;
   name: string;
+  phone: string;
   vehicle: string;
+  vehicleType: 'Bike' | 'Auto' | 'Cab';
   rating: number;
   status: 'online' | 'offline' | 'busy';
+  location: { lat: number; lng: number };
+}
+
+export interface Rider {
+  id: string;
+  name: string;
+  phone: string;
+  rating?: number;
 }
 
 export interface Ride {
@@ -35,6 +45,17 @@ export interface Ride {
   completedAt?: string;
   rating?: number;
   paymentStatus?: 'Pending' | 'Paid' | 'Disputed';
+  driverPhone?: string;
+  driverVehicleType?: string;
+  riderId?: string;
+  riderName?: string;
+  riderPhone?: string;
+  driverLat?: number;
+  driverLng?: number;
+  riderLat?: number;
+  riderLng?: number;
+  assignedAt?: string;
+  acceptedAt?: string;
   gpsLat: number;
   gpsLng: number;
   speed: number;

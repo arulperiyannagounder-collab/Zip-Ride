@@ -17,7 +17,7 @@ import {
   Coins,
   ShieldAlert
 } from 'lucide-react';
-import { Ride } from '../types';
+import { Ride, Driver } from '../types';
 
 interface DriverConsoleViewProps {
   activeRide: Ride | null;
@@ -29,6 +29,8 @@ interface DriverConsoleViewProps {
     weather: string;
     traffic: string;
   };
+  drivers: Driver[];
+  onPushDriverLocation: (rideId: string, lat: number, lng: number) => Promise<void>;
 }
 
 export default function DriverConsoleView({
@@ -37,7 +39,9 @@ export default function DriverConsoleView({
   onSendTelemetry,
   onCompleteRide,
   onRefresh,
-  systemConfig
+  systemConfig,
+  drivers,
+  onPushDriverLocation
 }: DriverConsoleViewProps) {
   const [speed, setSpeed] = useState<number>(0);
   const [isAutoSimulating, setIsAutoSimulating] = useState(false);
@@ -49,6 +53,11 @@ export default function DriverConsoleView({
   const [motion, setMotion] = useState<'stationary' | 'moving' | 'riding' | 'braking'>('stationary');
 
   const simulationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get current driver details from drivers pool
+  const currentDriver = activeRide?.driverId
+    ? drivers.find(d => d.id === activeRide.driverId)
+    : null;
 
   // Sync state values from active ride on mount/update
   useEffect(() => {
@@ -113,6 +122,9 @@ export default function DriverConsoleView({
             progress: nextProgress
           });
 
+          // Push driver location for real-time rider sync
+          onPushDriverLocation(activeRide.id, gpsLat, gpsLng);
+
           return nextProgress;
         });
       }, 2000);
@@ -172,18 +184,21 @@ export default function DriverConsoleView({
   return (
     <div className="space-y-6">
       
-      {/* Driver metadata card */}
+      {/* Driver metadata card — Dynamic from database */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-brand-emerald">
             <User className="w-6 h-6 shrink-0" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-900 text-base">Rajesh Kumar (Driver)</h3>
+            <h3 className="font-bold text-slate-900 text-base">{currentDriver?.name || activeRide?.driverName || 'Awaiting Assignment'} (Driver)</h3>
             <p className="text-xs font-mono text-slate-500 flex items-center gap-1">
               <Bike className="w-3.5 h-3.5 text-brand-emerald shrink-0" />
-              <span>BIKE-MH12-AB-1234 • Rated 4.8★</span>
+              <span>{currentDriver?.vehicle || activeRide?.driverVehicle || '—'} • Rated {currentDriver?.rating || activeRide?.driverRating || '—'}★</span>
             </p>
+            {(currentDriver?.phone || activeRide?.driverPhone) && (
+              <p className="text-[10px] font-mono text-slate-400 mt-0.5">📞 {currentDriver?.phone || activeRide?.driverPhone}</p>
+            )}
           </div>
         </div>
 
@@ -267,6 +282,29 @@ export default function DriverConsoleView({
                     </div>
                   </div>
                 </div>
+
+                {/* Rider details card */}
+                {activeRide.riderName && (
+                  <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 text-xs space-y-2">
+                    <span className="text-[10px] font-mono uppercase text-indigo-500 block font-bold">RIDER DETAILS</span>
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span className="font-bold text-slate-800">{activeRide.riderName}</span>
+                    </div>
+                    {activeRide.riderPhone && (
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <span>📞</span>
+                        <span className="font-mono font-semibold">{activeRide.riderPhone}</span>
+                      </div>
+                    )}
+                    {activeRide.riderLat && activeRide.riderLng && (
+                      <div className="flex items-center gap-2 text-slate-500 font-mono text-[10px]">
+                        <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
+                        <span>Rider GPS: {activeRide.riderLat.toFixed(4)}, {activeRide.riderLng.toFixed(4)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Automation trigger progress */}
                 <div className="space-y-3">

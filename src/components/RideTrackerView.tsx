@@ -15,12 +15,14 @@ import {
   Clock,
   ArrowRight
 } from 'lucide-react';
-import { Ride } from '../types';
+import { Ride, Driver } from '../types';
 
 interface RideTrackerViewProps {
   activeRide: Ride | null;
   onRefresh: () => void;
   onFileDispute: (rideId: string, reason: string) => Promise<void>;
+  drivers: Driver[];
+  onPushRiderLocation: (rideId: string, lat: number, lng: number) => Promise<void>;
 }
 
 interface ChatMessage {
@@ -31,7 +33,9 @@ interface ChatMessage {
 export default function RideTrackerView({
   activeRide,
   onRefresh,
-  onFileDispute
+  onFileDispute,
+  drivers,
+  onPushRiderLocation
 }: RideTrackerViewProps) {
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -60,6 +64,18 @@ export default function RideTrackerView({
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [activeRide]);
+
+  // Get assigned driver details from drivers pool
+  const assignedDriver = activeRide?.driverId
+    ? drivers.find(d => d.id === activeRide.driverId)
+    : null;
+
+  // Push rider location to backend for driver sync
+  useEffect(() => {
+    if (!activeRide || !activeRide.gpsLat || !activeRide.gpsLng) return;
+    // Push rider's pickup location as their position
+    onPushRiderLocation(activeRide.id, activeRide.gpsLat, activeRide.gpsLng);
+  }, [activeRide?.id, activeRide?.gpsLat]);
 
   // Sync scroll on chat
   useEffect(() => {
@@ -244,6 +260,55 @@ export default function RideTrackerView({
                 <MapPin className="w-5 h-5 text-rose-500" />
               </div>
             </div>
+
+            {/* Assigned Driver Details Card */}
+            {activeRide.driverId && (
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">ASSIGNED DRIVER</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">LIVE</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-brand-emerald shrink-0">
+                    <User className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono uppercase block">Name</span>
+                      <span className="text-sm font-bold text-slate-800">{assignedDriver?.name || activeRide.driverName || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono uppercase block">Vehicle</span>
+                      <span className="text-sm font-bold text-slate-800">{assignedDriver?.vehicle || activeRide.driverVehicle || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono uppercase block">Rating</span>
+                      <span className="text-sm font-bold text-slate-800">{assignedDriver?.rating || activeRide.driverRating || '—'}★</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono uppercase block">Phone</span>
+                      <span className="text-sm font-bold text-slate-800">{assignedDriver?.phone || activeRide.driverPhone || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono uppercase block">Type</span>
+                      <span className="text-sm font-bold text-slate-800">{assignedDriver?.vehicleType || activeRide.driverVehicleType || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono uppercase block">Driver ID</span>
+                      <span className="text-sm font-mono font-bold text-slate-800">{activeRide.driverId}</span>
+                    </div>
+                  </div>
+                </div>
+                {activeRide.driverLat && activeRide.driverLng && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span>Driver GPS: {activeRide.driverLat.toFixed(4)}, {activeRide.driverLng.toFixed(4)}</span>
+                    <span className="text-slate-300">|</span>
+                    <span>ETA: {activeRide.driverLat && activeRide.gpsLat ? ((Math.abs(activeRide.driverLat - activeRide.gpsLat) + Math.abs((activeRide.driverLng || 0) - activeRide.gpsLng)) * 111 * 2.1).toFixed(1) : '—'} min</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Live Telemetry warning overlays */}
             {safetyLog.length > 0 && (
