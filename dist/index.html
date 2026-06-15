@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZipRide Console</title>
+    <script>
+      (function() {
+        try {
+          const theme = localStorage.getItem('zipride_theme') || 'system';
+          if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-DOfrnCek.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B19imR09.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+

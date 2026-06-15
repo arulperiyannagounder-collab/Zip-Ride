@@ -5,7 +5,7 @@ import { apiRouter } from './backend/routes.js';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = 3001;
 
   // Middleware for body parsing
   app.use(express.json());

@@ -14,6 +14,11 @@ export interface Rider {
   name: string;
   phone: string;
   rating?: number;
+  emergencyContact?: {
+    name: string;
+    phone: string;
+  };
+  sosCountPerUser?: number;
 }
 
 export interface Ride {
@@ -35,7 +40,7 @@ export interface Ride {
   harshBrakeEvents: number;
   behaviorDiscount: number;
   finalFare: number;
-  paymentMethod: 'UPI' | 'Wallet' | 'Card';
+  paymentMethod: 'UPI' | 'Wallet' | 'Card' | 'GooglePay' | 'PhonePe' | 'Paytm' | 'BHIM' | 'AmazonPay' | 'Razorpay' | 'Stripe' | 'Cash';
   status: 'booked' | 'assigned' | 'pickup' | 'en_route' | 'arrived' | 'completed' | 'cancelled';
   driverId?: string;
   driverName?: string;
@@ -44,7 +49,9 @@ export interface Ride {
   createdAt: string;
   completedAt?: string;
   rating?: number;
-  paymentStatus?: 'Pending' | 'Paid' | 'Disputed';
+  paymentStatus?: 'Pending' | 'Paid' | 'Disputed' | 'pending' | 'processing' | 'paid' | 'failed';
+  paymentReference?: string;
+  paidAt?: string;
   driverPhone?: string;
   driverVehicleType?: string;
   riderId?: string;
@@ -79,6 +86,33 @@ export interface Ride {
   windSpeed?: number;
   weatherMultiplier?: number;
   rainChance?: number;
+  
+  // SOS Safety integration
+  isSilentSOS?: boolean;
+  hasActiveSOS?: boolean;
+}
+
+export interface SOSAlert {
+  id: string;
+  rideId: string;
+  riderId: string;
+  riderName: string;
+  driverId: string;
+  driverName: string;
+  vehicleNumber: string;
+  reason: string;
+  riderLocation: {
+    lat: number;
+    lng: number;
+  };
+  driverLocation: {
+    lat: number;
+    lng: number;
+  };
+  status: 'active' | 'investigating' | 'resolved' | 'false_alarm';
+  severity: 'low' | 'medium' | 'high';
+  isSilentSOS?: boolean;
+  createdAt: string;
 }
 
 export interface Dispute {

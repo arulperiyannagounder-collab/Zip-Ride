@@ -21,6 +21,8 @@ import NotFoundView from './components/NotFoundView';
 import SettingsView from './components/SettingsView';
 import RideHistoryView from './components/RideHistoryView';
 import ErrorBoundary from './components/ErrorBoundary';
+import AiAssistantView from './components/AiAssistantView';
+import AiAssistantWidget from './components/AiAssistantWidget';
 import { SystemState, Ride, Dispute, SystemConfig, Driver } from './types';
 import { useTheme } from './components/ThemeContext';
 import { useToast } from './components/ToastNotification';
@@ -101,13 +103,17 @@ export default function App() {
   // Derived states
   const activeRide = allRides.find(r => {
     const activeStatuses = ['booked', 'accepted', 'assigned', 'pickup', 'en_route', 'arrived', 'anomaly', 'in_progress'];
+    const isDismissedByDriver = localStorage.getItem(`zipride_dismissed_driver_ride_${r.id}`) === 'true';
+    const isCompletedAndUnpaid = r.status === 'completed' && r.paymentStatus !== 'paid';
+    const isCompletedAndPendingDriverSettle = r.status === 'completed' && !isDismissedByDriver;
+    
     if (currentUserRole === 'driver') {
-      return r.driverName === currentUser && activeStatuses.includes(r.status);
+      return r.driverName === currentUser && (activeStatuses.includes(r.status) || isCompletedAndPendingDriverSettle);
     }
     if (currentUserRole === 'passenger') {
-      return r.riderName === currentUser && activeStatuses.includes(r.status);
+      return r.riderName === currentUser && (activeStatuses.includes(r.status) || isCompletedAndUnpaid);
     }
-    return activeStatuses.includes(r.status);
+    return activeStatuses.includes(r.status) || isCompletedAndUnpaid;
   }) || null;
 
   console.log("Current Rides:", allRides);
@@ -178,17 +184,17 @@ export default function App() {
 
     // 3. Role-based route authorization
     if (currentUserRole === 'passenger') {
-      const allowedPaths = ['/', '/booking', '/tracker', '/fares', '/history', '/settings'];
+      const allowedPaths = ['/', '/booking', '/tracker', '/fares', '/history', '/settings', '/ai-assistant'];
       if (!allowedPaths.includes(currentPath)) {
         selectTab('/');
       }
     } else if (currentUserRole === 'driver') {
-      const allowedPaths = ['/driver', '/settings'];
+      const allowedPaths = ['/driver', '/settings', '/ai-assistant'];
       if (!allowedPaths.includes(currentPath)) {
         selectTab('/driver');
       }
     } else if (currentUserRole === 'admin') {
-      // Admin has access to all routes: '/', '/booking', '/tracker', '/driver', '/disputes', '/fares', '/history', '/settings'
+      // Admin has access to all routes
     }
   }, [isLoggedIn, currentPath, currentUserRole]);
 
@@ -329,6 +335,26 @@ export default function App() {
     selectTab('/booking');
   };
 
+  const handlePayRide = async (id: string, reference?: string, method: string = 'UPI', status: string = 'paid') => {
+    const res = await fetch(`/api/rides/${id}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentReference: reference, paymentMethod: method, paymentStatus: status })
+    });
+    if (res.ok) {
+      if (status === 'paid') {
+        showToast("Payment successful! Ride status: Paid", "success");
+      } else if (status === 'processing') {
+        showToast("Payment processing initiated...", "info");
+      } else if (status === 'failed') {
+        showToast("Payment failed. Please try again.", "error");
+      }
+      await fetchAllData(true);
+    } else {
+      showToast("Payment processing failed.", "error");
+    }
+  };
+
   // 8. RESOLVE TICKET DISPUTE ACTION
   const handleResolveDispute = async (id: string, status: 'resolved' | 'rejected', refundAmount: number) => {
     const res = await fetch(`/api/disputes/${id}/resolve`, {
@@ -422,6 +448,7 @@ export default function App() {
       case '/fares': return 'Fare Policy & Multipliers';
       case '/history': return 'Ride History';
       case '/settings': return 'Account Settings';
+      case '/ai-assistant': return 'AI Operations Assistant';
       case '/login': return 'Welcome to ZipRide';
       default: return 'Page Not Found';
     }
@@ -585,6 +612,7 @@ export default function App() {
               drivers={allDrivers}
               onPushRiderLocation={handlePushRiderLocation}
               onRateRide={handleRateRide}
+              onPayRide={handlePayRide}
             />
           )}
 
@@ -623,6 +651,16 @@ export default function App() {
             />
           )}
 
+          {currentPath === '/ai-assistant' && (
+            <AiAssistantView 
+              currentUser={currentUser}
+              currentUserRole={currentUserRole}
+              onSelectTab={selectTab}
+              systemState={systemState}
+              activeRide={activeRide}
+            />
+          )}
+
           {currentPath === '/404' && (
             <NotFoundView 
               onGoHome={() => selectTab('/')}
@@ -631,13 +669,20 @@ export default function App() {
           )}
 
           {/* Fallback client-side matching for non-registered paths */}
-          {!['/', '/booking', '/driver', '/tracker', '/disputes', '/fares', '/login', '/404', '/history', '/settings'].includes(currentPath) && (
+          {!['/', '/booking', '/driver', '/tracker', '/disputes', '/fares', '/login', '/404', '/history', '/settings', '/ai-assistant'].includes(currentPath) && (
             <NotFoundView 
               onGoHome={() => selectTab('/')}
               currentPath={currentPath}
             />
           )}
         </main>
+        
+        {/* Global Floating AI Assistant Widget */}
+        <AiAssistantWidget 
+          currentUser={currentUser}
+          currentUserRole={currentUserRole}
+          currentPath={currentPath}
+        />
       </div>
     </div>
   </ErrorBoundary>

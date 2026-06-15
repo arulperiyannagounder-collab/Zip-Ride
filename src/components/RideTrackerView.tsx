@@ -16,6 +16,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Ride, Driver } from '../types';
+import { SosButton } from './SosButton';
 
 interface RideTrackerViewProps {
   activeRide: Ride | null;
@@ -24,6 +25,7 @@ interface RideTrackerViewProps {
   drivers: Driver[];
   onPushRiderLocation: (rideId: string, lat: number, lng: number) => Promise<void>;
   onRateRide: (id: string, rating: number) => Promise<void>;
+  onPayRide?: (id: string, reference?: string, method?: string, status?: string) => Promise<void>;
 }
 
 interface ChatMessage {
@@ -37,7 +39,8 @@ export default function RideTrackerView({
   onFileDispute,
   drivers,
   onPushRiderLocation,
-  onRateRide
+  onRateRide,
+  onPayRide
 }: RideTrackerViewProps) {
   console.log("Active Ride:", activeRide);
   const [chatInput, setChatInput] = useState('');
@@ -52,6 +55,85 @@ export default function RideTrackerView({
   const [safetyLog, setSafetyLog] = useState<string[]>([]);
   const [disputeFiled, setDisputeFiled] = useState(false);
   const [complaintText, setComplaintText] = useState('');
+  
+  const [showQRPanel, setShowQRPanel] = useState(false);
+  const [merchantUpiId, setMerchantUpiId] = useState('zipride@upi');
+  const [isSuccessPaid, setIsSuccessPaid] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<'GooglePay' | 'PhonePe' | 'Paytm' | 'BHIM' | 'AmazonPay' | 'Cash' | 'Razorpay' | 'Stripe'>('GooglePay');
+  const [paymentInfoMessage, setPaymentInfoMessage] = useState('');
+
+  const handleLaunchAppAndPay = async (appName: typeof selectedApp) => {
+    if (!activeRide) return;
+    setSelectedApp(appName);
+    
+    if (appName === 'Cash') {
+      setIsPaying(true);
+      if (onPayRide) {
+        await onPayRide(activeRide.id, undefined, 'Cash', 'processing');
+      }
+      setTimeout(async () => {
+        setIsSuccessPaid(true);
+        const refCode = `CASH-${Math.floor(100000 + Math.random() * 900000)}`;
+        if (onPayRide) {
+          await onPayRide(activeRide.id, refCode, 'Cash', 'paid');
+        }
+        setIsPaying(false);
+      }, 1500);
+      return;
+    }
+
+    if (appName === 'Razorpay' || appName === 'Stripe') {
+      setPaymentInfoMessage(`${appName} gateway integration is ready. Simulation will proceed.`);
+      setTimeout(() => setPaymentInfoMessage(''), 3000);
+      return;
+    }
+
+    setIsPaying(true);
+    
+    // Generate UPI String
+    const upiString = `upi://pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`;
+    
+    // Map to deep link
+    let deepLink = upiString;
+    if (appName === 'GooglePay') {
+      deepLink = `gpay://upi/pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`;
+    } else if (appName === 'PhonePe') {
+      deepLink = `phonepe://upi/pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`;
+    } else if (appName === 'Paytm') {
+      deepLink = `paytmmp://upi/pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`;
+    } else if (appName === 'BHIM') {
+      deepLink = `bhim://upi/pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`;
+    } else if (appName === 'AmazonPay') {
+      deepLink = `amazonpay://upi/pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`;
+    }
+
+    console.log(`Launching deep link for ${appName}: ${deepLink}`);
+
+    if (onPayRide) {
+      await onPayRide(activeRide.id, undefined, appName, 'processing');
+    }
+
+    // Attempt to open custom protocol with standard fallback
+    try {
+      window.location.href = deepLink;
+    } catch (e) {
+      console.warn("Deep link redirection failed, default fallback standard link launched:", upiString);
+      try {
+        window.open(upiString, '_blank');
+      } catch (err) {}
+    }
+
+    // Simulate completion
+    setTimeout(async () => {
+      setIsSuccessPaid(true);
+      const refCode = `TXN-${appName.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      if (onPayRide) {
+        await onPayRide(activeRide.id, refCode, appName, 'paid');
+      }
+      setIsPaying(false);
+    }, 2500);
+  };
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -262,6 +344,10 @@ export default function RideTrackerView({
                 <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-theme-text-secondary bg-slate-900/80 px-2 py-0.5 border border-slate-800 rounded-md mb-1 whitespace-nowrap">Drop</span>
                 <MapPin className="w-5 h-5 text-rose-500" />
               </div>
+
+              {activeRide && ['booked', 'accepted', 'in_progress', 'assigned', 'pickup', 'en_route', 'arrived', 'anomaly'].includes(activeRide.status) && (
+                <SosButton rideId={activeRide.id} onClick={onRefresh} />
+              )}
             </div>
 
             {/* Assigned Driver Details Card */}
@@ -494,64 +580,323 @@ export default function RideTrackerView({
               </div>
             )}
 
-            {/* TRIP COMPLETED -> FILE COMPLAINT / DISPUTE DIRECT FORM */}
+            {/* TRIP COMPLETED -> QR PAYMENT & RATING/DISPUTE FLOW */}
             {activeRide.status === 'completed' && (
-              <div className="bg-theme-card border border-theme-border rounded-2xl p-6 shadow-xs space-y-4">
-                {/* Stars Rating selection */}
-                <div className="border-b border-theme-border pb-4">
-                  <span className="text-xs font-bold text-theme-text-primary block">Rate Your Commute</span>
-                  <p className="text-[11px] text-theme-text-secondary mt-0.5">Let us know how your driver performed.</p>
+              <div className="space-y-6">
+                
+                {/* Pay Now Banner */}
+                {activeRide.paymentStatus !== 'paid' && !showQRPanel && (
+                  <div className="bg-gradient-to-r from-emerald-500/10 to-indigo-500/10 border-2 border-brand-emerald rounded-2xl p-6 shadow-md space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-brand-emerald/15 flex items-center justify-center shrink-0 text-brand-emerald">
+                        <Navigation className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-theme-text-primary text-base">Ride Completed — Payment Pending</h4>
+                        <p className="text-xs text-theme-text-secondary">Please settle your fare amount of <span className="font-bold font-mono text-brand-emerald">₹{activeRide.finalFare.toFixed(2)}</span> to finalize your trip.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowQRPanel(true)}
+                      className="w-full bg-brand-emerald hover:bg-brand-emerald-dark text-white font-bold py-3.5 rounded-xl transition shadow text-xs uppercase tracking-wider cursor-pointer"
+                    >
+                      Pay Now
+                    </button>
+                  </div>
+                )}
+
+                {/* QR Payment Panel (Enhanced UPI Portal) */}
+                {showQRPanel && (
+                  <div className="bg-theme-card border-2 border-brand-emerald rounded-2xl p-6 shadow-lg space-y-5 animate-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between border-b border-theme-border pb-3">
+                      <div>
+                        <h3 className="text-base font-black text-theme-text-primary tracking-tight">PAY FOR YOUR RIDE</h3>
+                        <p className="text-[10px] text-theme-text-secondary mt-0.5 font-mono">Simulated Secure Gateway Panel</p>
+                      </div>
+                      <button
+                        onClick={() => setShowQRPanel(false)}
+                        className="text-theme-text-secondary hover:text-theme-text-primary text-xs font-bold bg-theme-bg px-2.5 py-1.5 rounded-lg border border-theme-border transition cursor-pointer"
+                      >
+                        ✕ Cancel
+                      </button>
+                    </div>
+
+                    {/* Transaction Success Screen */}
+                    {activeRide.paymentStatus === 'paid' || isSuccessPaid ? (
+                      <div className="space-y-5 py-4 animate-in fade-in zoom-in-95 duration-300">
+                        <div className="flex flex-col items-center text-center">
+                          <div className="w-16 h-16 rounded-full bg-emerald-550/15 border-4 border-brand-emerald/30 text-brand-emerald flex items-center justify-center mb-3 animate-bounce">
+                            <span className="text-2xl font-bold">✓</span>
+                          </div>
+                          <h4 className="text-lg font-black text-theme-text-primary">Payment Successful</h4>
+                          <p className="text-xs text-theme-text-secondary mt-1">Thank you for riding with ZipRide!</p>
+                        </div>
+
+                        <div className="bg-theme-bg/50 border border-theme-border rounded-2xl p-4 space-y-3.5 text-xs font-semibold">
+                          <div className="flex justify-between items-center">
+                            <span className="text-theme-text-secondary">Transaction Reference:</span>
+                            <span className="font-mono text-theme-text-primary text-right select-all">{activeRide.paymentReference || 'TXN-MOCK-994103'}</span>
+                          </div>
+                          <div className="flex justify-between items-center border-t border-theme-border/40 pt-2.5">
+                            <span className="text-theme-text-secondary">Ride ID:</span>
+                            <span className="font-mono text-theme-text-primary text-right">{activeRide.id}</span>
+                          </div>
+                          <div className="flex justify-between items-center border-t border-theme-border/40 pt-2.5">
+                            <span className="text-theme-text-secondary">Amount Paid:</span>
+                            <span className="font-mono text-indigo-500 font-black text-sm text-right">₹{activeRide.finalFare.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center border-t border-theme-border/40 pt-2.5">
+                            <span className="text-theme-text-secondary">Date & Time:</span>
+                            <span className="text-theme-text-primary text-right">{activeRide.paidAt ? new Date(activeRide.paidAt).toLocaleString() : new Date().toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowQRPanel(false)}
+                          className="w-full bg-brand-emerald hover:bg-brand-emerald-dark text-white font-bold py-3 rounded-xl transition shadow text-xs uppercase tracking-wider cursor-pointer"
+                        >
+                          Close Receipt
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Processing Loader Screen */}
+                        {activeRide.paymentStatus === 'processing' || isPaying ? (
+                          <div className="flex flex-col items-center text-center py-8 space-y-4 animate-in fade-in duration-300">
+                            <div className="w-12 h-12 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin"></div>
+                            <div>
+                              <h4 className="text-sm font-bold text-theme-text-primary">Verifying Settle Request</h4>
+                              <p className="text-xs text-theme-text-secondary mt-1">Processing via {selectedApp}. Please approve the payment popup inside your selected app.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Ride Meta Info */}
+                            <div className="grid grid-cols-2 gap-3 text-xs bg-theme-bg/50 border border-theme-border rounded-xl p-3">
+                              <div>
+                                <span className="text-[9px] text-theme-text-secondary font-mono uppercase block">Ride ID</span>
+                                <span className="text-theme-text-primary font-mono font-bold">{activeRide.id}</span>
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-theme-text-secondary font-mono uppercase block">Driver Name</span>
+                                <span className="text-theme-text-primary font-bold">{activeRide.driverName || 'ZipRide Partner'}</span>
+                              </div>
+                              <div className="col-span-2 border-t border-theme-border/50 pt-1.5 mt-1">
+                                <span className="text-[9px] text-theme-text-secondary font-mono uppercase block">Pickup</span>
+                                <span className="text-theme-text-primary font-semibold truncate block" title={activeRide.pickup}>{activeRide.pickup}</span>
+                              </div>
+                              <div className="col-span-2 border-t border-theme-border/50 pt-1.5">
+                                <span className="text-[9px] text-theme-text-secondary font-mono uppercase block">Destination</span>
+                                <span className="text-theme-text-primary font-semibold truncate block" title={activeRide.drop}>{activeRide.drop}</span>
+                              </div>
+                              <div className="col-span-2 border-t border-theme-border/50 pt-1.5 flex justify-between items-center">
+                                <span className="text-[10px] text-theme-text-primary font-bold uppercase">Total Fare</span>
+                                <span className="text-indigo-500 text-base font-black font-mono">₹{activeRide.finalFare.toFixed(2)}</span>
+                              </div>
+                            </div>
+
+                            {/* Dynamic Clickable QR Code */}
+                            <div 
+                              onClick={() => setPaymentInfoMessage("Scan QR Code to open standard UPI app selector. Or select an option below for deep linking.")}
+                              className="flex flex-col items-center bg-white dark:bg-slate-900 border border-theme-border rounded-2xl p-4 shadow-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition relative group"
+                              title="Click for options"
+                            >
+                              <div className="flex items-center justify-between w-full mb-3 text-[9px] font-mono text-slate-500 uppercase">
+                                <span>UPI SCANNER DETAILS</span>
+                                <span className="text-brand-emerald font-bold font-mono">CLICK QR TO INFO</span>
+                              </div>
+
+                              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs relative">
+                                <img
+                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                                    `upi://pay?pa=${merchantUpiId}&pn=ZipRide&am=${activeRide.finalFare.toFixed(2)}&cu=INR&tn=Ride-${activeRide.id}`
+                                  )}`}
+                                  alt="UPI Payment QR Code"
+                                  className="w-36 h-36 object-contain"
+                                />
+                                <div className="absolute inset-0 bg-black/5 rounded-xl opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                  <span className="bg-slate-900/90 text-white text-[9px] font-bold px-2 py-1 rounded">Interactive QR</span>
+                                </div>
+                              </div>
+
+                              {paymentInfoMessage && (
+                                <div className="w-full mt-2 bg-indigo-550/10 text-indigo-600 dark:text-indigo-400 p-2 rounded-lg text-[10px] text-center font-bold animate-pulse">
+                                  {paymentInfoMessage}
+                                </div>
+                              )}
+
+                              <div className="w-full mt-3 space-y-1.5 text-[10px] border-t border-slate-100 dark:border-slate-800 pt-2 text-slate-650 dark:text-slate-350">
+                                <div className="flex justify-between">
+                                  <span>Merchant ID:</span>
+                                  <span className="font-mono font-bold text-slate-900 dark:text-white">{merchantUpiId}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Reference:</span>
+                                  <span className="font-mono font-bold text-slate-900 dark:text-white">{activeRide.id}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-center text-[10px] font-mono font-bold text-theme-text-secondary uppercase">
+                              — OR —
+                            </div>
+
+                            {/* Choose UPI App grid */}
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-theme-text-secondary mb-2.5">Choose Payment App</label>
+                              <div className="grid grid-cols-2 gap-2 text-xs font-bold text-theme-text-primary">
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('GooglePay')}
+                                  className="flex items-center gap-2 p-2.5 border border-theme-border bg-theme-bg hover:bg-slate-100/50 dark:hover:bg-slate-800/40 rounded-xl transition cursor-pointer"
+                                >
+                                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+                                  <span>Google Pay</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('PhonePe')}
+                                  className="flex items-center gap-2 p-2.5 border border-theme-border bg-theme-bg hover:bg-slate-100/50 dark:hover:bg-slate-800/40 rounded-xl transition cursor-pointer"
+                                >
+                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0" />
+                                  <span>PhonePe</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('Paytm')}
+                                  className="flex items-center gap-2 p-2.5 border border-theme-border bg-theme-bg hover:bg-slate-100/50 dark:hover:bg-slate-800/40 rounded-xl transition cursor-pointer"
+                                >
+                                  <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+                                  <span>Paytm</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('BHIM')}
+                                  className="flex items-center gap-2 p-2.5 border border-theme-border bg-theme-bg hover:bg-slate-100/50 dark:hover:bg-slate-800/40 rounded-xl transition cursor-pointer"
+                                >
+                                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
+                                  <span>BHIM UPI</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('AmazonPay')}
+                                  className="flex items-center gap-2 p-2.5 border border-theme-border bg-theme-bg hover:bg-slate-100/50 dark:hover:bg-slate-800/40 rounded-xl transition cursor-pointer"
+                                >
+                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                                  <span>Amazon Pay</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('Cash')}
+                                  className="flex items-center gap-2 p-2.5 border border-theme-border bg-theme-bg hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-emerald-600 rounded-xl transition cursor-pointer"
+                                >
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                                  <span>Cash Settle</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Future Ready Gateways */}
+                            <div className="border-t border-theme-border/60 pt-3">
+                              <label className="block text-[9px] font-mono font-bold uppercase tracking-wider text-theme-text-secondary mb-2">Future Ready Gateways</label>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('Razorpay')}
+                                  className="flex-1 text-[10px] font-bold py-2 border border-dashed border-theme-border bg-theme-bg/30 text-theme-text-secondary opacity-60 rounded-lg cursor-not-allowed hover:opacity-80 transition"
+                                >
+                                  Razorpay (Sim)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleLaunchAppAndPay('Stripe')}
+                                  className="flex-1 text-[10px] font-bold py-2 border border-dashed border-theme-border bg-theme-bg/30 text-theme-text-secondary opacity-60 rounded-lg cursor-not-allowed hover:opacity-80 transition"
+                                >
+                                  Stripe (Sim)
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Configurable UPI Merchant Selector */}
+                            <div className="flex items-center justify-between text-[11px] border-t border-theme-border pt-3">
+                              <span className="font-bold text-theme-text-secondary">Merchant Account:</span>
+                              <select
+                                value={merchantUpiId}
+                                onChange={(e) => setMerchantUpiId(e.target.value)}
+                                className="bg-theme-bg border border-theme-border rounded-lg px-2 py-1 text-xs font-mono font-bold text-theme-text-primary"
+                              >
+                                <option value="zipride@upi">zipride@upi</option>
+                                <option value="projectdemo@paytm">projectdemo@paytm</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Rating & Dispute form remains available */}
+                <div className="bg-theme-card border border-theme-border rounded-2xl p-6 shadow-xs space-y-4">
+                  {/* Stars Rating selection */}
+                  <div className="border-b border-theme-border pb-4">
+                    <span className="text-xs font-bold text-theme-text-primary block">Rate Your Commute</span>
+                    <p className="text-[11px] text-theme-text-secondary mt-0.5">Let us know how your driver performed.</p>
+                    
+                    {activeRide.rating ? (
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <span className="text-amber-500 text-sm">★</span>
+                        <span className="text-xs font-bold text-theme-text-primary">You rated this trip {activeRide.rating} stars</span>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 mt-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            onClick={() => onRateRide(activeRide.id, star)}
+                            className="text-lg text-theme-text-secondary hover:text-amber-500 cursor-pointer transition-colors"
+                            id={`rate-star-${star}`}
+                          >
+                            ★
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 border-b border-theme-border pb-3">
+                    <ShieldAlert className="w-5 h-5 text-brand-emerald" />
+                    <h4 className="font-bold text-theme-text-primary text-sm">File Dynamic Safe Shield Report</h4>
+                  </div>
                   
-                  {activeRide.rating ? (
-                    <div className="flex items-center gap-1.5 mt-2">
-                      <span className="text-amber-500 text-sm">★</span>
-                      <span className="text-xs font-bold text-theme-text-primary">You rated this trip {activeRide.rating} stars</span>
+                  {disputeFiled ? (
+                    <div className="p-4 bg-emerald-50 text-theme-text-primary border border-emerald-100 rounded-xl space-y-1">
+                      <span className="font-bold text-emerald-800 text-xs text-center block">Dispute Filed Successfully!</span>
+                      <p className="text-[11px] text-theme-text-secondary text-center">Your operations analyst summary has booted. Head to the Disputes tab to watch Gemini analytical decision trees.</p>
                     </div>
                   ) : (
-                    <div className="flex gap-2 mt-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          onClick={() => onRateRide(activeRide.id, star)}
-                          className="text-lg text-theme-text-secondary hover:text-amber-500 cursor-pointer transition-colors"
-                          id={`rate-star-${star}`}
-                        >
-                          ★
-                        </button>
-                      ))}
-                    </div>
+                    <form onSubmit={handleComplaint} className="space-y-4">
+                      <p className="text-xs text-theme-text-secondary">Provide an operational note about any transit overspeeding risks, harsh driving, or surcharges to initiate fully automated dispute adjudication.</p>
+                      <textarea
+                        value={complaintText}
+                        onChange={(e) => setComplaintText(e.target.value)}
+                        placeholder="Comment on overspeeding/harsh braking or fare billing issues..."
+                        rows={3}
+                        className="w-full bg-theme-bg border border-theme-border p-3 text-xs font-semibold text-theme-text-primary rounded-xl outline-none focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 transition"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!complaintText.trim()}
+                        className="bg-slate-900 text-white hover:bg-black disabled:bg-slate-200 disabled:text-theme-text-secondary text-xs font-bold py-2.5 px-5 rounded-xl cursor-pointer disabled:cursor-not-allowed transition"
+                      >
+                        File Analysis Dispute
+                      </button>
+                    </form>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 border-b border-theme-border pb-3">
-                  <ShieldAlert className="w-5 h-5 text-brand-emerald" />
-                  <h4 className="font-bold text-theme-text-primary text-sm">File Dynamic Safe Shield Report</h4>
-                </div>
-                
-                {disputeFiled ? (
-                  <div className="p-4 bg-emerald-50 text-theme-text-primary border border-emerald-100 rounded-xl space-y-1">
-                    <span className="font-bold text-emerald-800 text-xs text-center block">Dispute Filed Successfully!</span>
-                    <p className="text-[11px] text-theme-text-secondary text-center">Your operations analyst summary has booted. Head to the Disputes tab to watch Gemini analytical decision trees.</p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleComplaint} className="space-y-4">
-                    <p className="text-xs text-theme-text-secondary">Provide an operational note about any transit overspeeding risks, harsh driving, or surcharges to initiate fully automated dispute adjudication.</p>
-                    <textarea
-                      value={complaintText}
-                      onChange={(e) => setComplaintText(e.target.value)}
-                      placeholder="Comment on overspeeding/harsh braking or fare billing issues..."
-                      rows={3}
-                      className="w-full bg-theme-bg border border-theme-border p-3 text-xs font-semibold text-theme-text-primary rounded-xl outline-none focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 transition"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!complaintText.trim()}
-                      className="bg-slate-900 text-white hover:bg-black disabled:bg-slate-200 disabled:text-theme-text-secondary text-xs font-bold py-2.5 px-5 rounded-xl cursor-pointer disabled:cursor-not-allowed transition"
-                    >
-                      File Analysis Dispute
-                    </button>
-                  </form>
-                )}
               </div>
             )}
 

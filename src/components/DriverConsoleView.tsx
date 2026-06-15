@@ -230,6 +230,28 @@ export default function DriverConsoleView({
     }
   };
 
+  const handleDriverConfirmPayment = async () => {
+    if (!activeRide) return;
+    try {
+      const res = await fetch(`/api/rides/${activeRide.id}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentReference: `DRV-CASH-${Math.floor(100000 + Math.random() * 900000)}`, paymentMethod: 'UPI' })
+      });
+      if (res.ok) {
+        onRefresh();
+      }
+    } catch (e) {
+      console.error("Failed to confirm payment by driver:", e);
+    }
+  };
+
+  const handleDriverDismissRide = () => {
+    if (!activeRide) return;
+    localStorage.setItem(`zipride_dismissed_driver_ride_${activeRide.id}`, 'true');
+    onRefresh();
+  };
+
   const myHistoryRides = allRides.filter(r => 
     (r.status === 'completed' || r.status === 'cancelled') && r.driverName === currentUser
   );
@@ -827,7 +849,7 @@ export default function DriverConsoleView({
             </div>
           )}
 
-          {/* ARRIVAL PAYMENT POPUP (Update for Addition 6) */}
+          {/* ARRIVAL PAYMENT POPUP (Update for UPI Payment) */}
           {activeRide.status === 'completed' && (
             <div className="lg:col-span-8">
               <div className="bg-theme-card border-2 border-slate-900 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500 max-w-lg mx-auto">
@@ -839,6 +861,31 @@ export default function DriverConsoleView({
                   </div>
                   <h3 className="text-2xl font-black text-theme-text-primary tracking-tight">📍 You've arrived!</h3>
                   <p className="text-theme-text-secondary mt-1 font-medium text-sm">Please finalize the payment with the rider</p>
+                  
+                  {/* Payment Status badge */}
+                  <div className="mt-3.5 flex justify-center">
+                    {activeRide.paymentStatus === 'paid' ? (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold bg-emerald-550/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 animate-pulse">
+                        <Check className="w-4 h-4" />
+                        ✓ Payment Received (Successful)
+                      </span>
+                    ) : activeRide.paymentStatus === 'processing' ? (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        <span className="w-2 h-2 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                        ⏳ Payment Processing...
+                      </span>
+                    ) : activeRide.paymentStatus === 'failed' ? (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                        <span>❌</span>
+                        Payment Failed (Try Again)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                        ⏳ Payment Pending (UPI QR)
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="bg-theme-bg border border-theme-border/80 rounded-2xl p-5 space-y-3 mb-6">
@@ -879,20 +926,34 @@ export default function DriverConsoleView({
                     <span className="font-black text-theme-text-primary text-lg">Final total:</span>
                     <div className="text-right">
                       <span className="font-mono font-black text-3xl text-indigo-600 tracking-tight block">₹{activeRide.finalFare.toFixed(2)}</span>
-                      <span className="text-[11px] font-semibold text-theme-text-secondary mt-1 block">Payment: {activeRide.paymentMethod} ••••4521</span>
+                      <span className="text-[11px] font-semibold text-theme-text-secondary mt-1 block">Payment status: <span className="font-bold font-mono">{activeRide.paymentStatus || 'pending'}</span></span>
                     </div>
                   </div>
 
                 </div>
 
                 <div className="space-y-3">
-                  <button className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2">
-                    <Check className="w-5 h-5 shrink-0" />
-                    Confirm & Pay ₹{activeRide.finalFare.toFixed(2)}
-                  </button>
-                  <button className="w-full bg-theme-card hover:bg-theme-bg border border-theme-border text-theme-text-primary py-3.5 rounded-xl font-bold transition shadow-sm text-sm">
-                    ? Something's wrong
-                  </button>
+                  {activeRide.paymentStatus === 'paid' ? (
+                    <button
+                      onClick={handleDriverDismissRide}
+                      className="w-full bg-brand-emerald hover:bg-brand-emerald-dark text-white py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 cursor-pointer text-sm animate-in fade-in"
+                    >
+                      <Check className="w-5 h-5 shrink-0" />
+                      Complete & Dismiss Ride
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleDriverConfirmPayment}
+                        disabled={activeRide.paymentStatus === 'processing'}
+                        className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 cursor-pointer text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Check className="w-5 h-5 shrink-0" />
+                        {activeRide.paymentStatus === 'processing' ? 'Verifying payment...' : 'Confirm Cash / Settle Manually'}
+                      </button>
+                      <p className="text-[10px] text-center text-theme-text-secondary">Rider can scan the UPI QR on their screen. This panel will update instantly once paid.</p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

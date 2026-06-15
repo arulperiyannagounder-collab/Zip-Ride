@@ -31,7 +31,7 @@ type DisplayStatus =
 function getDisplayStatus(ride: Ride, dispute?: Dispute): DisplayStatus {
   if (dispute?.status === 'resolved' && dispute.resolutionRefundAmount > 0) return 'refund_processed';
   if (dispute && dispute.status === 'open') return 'dispute_open';
-  if (ride.paymentStatus === 'Disputed') return 'dispute_open';
+  if (ride.paymentStatus && ride.paymentStatus.toLowerCase() === 'disputed') return 'dispute_open';
   if (ride.status === 'completed') return 'completed';
   if (ride.status === 'cancelled') return 'cancelled';
   // active
@@ -538,8 +538,11 @@ export default function RideHistoryView({
                                       </div>
                                       <div>
                                         <span className="text-[9px] uppercase font-mono block text-theme-text-secondary">Status</span>
-                                        <span className={`font-bold ${ride.paymentStatus === 'Disputed' ? 'text-orange-500' : ride.paymentStatus === 'Paid' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                          {ride.paymentStatus || 'Paid'}
+                                        <span className={`font-bold ${
+                                          (ride.paymentStatus || '').toLowerCase() === 'disputed' ? 'text-orange-500' :
+                                          (ride.paymentStatus || '').toLowerCase() === 'paid' ? 'text-emerald-500' : 'text-amber-500'
+                                        }`}>
+                                          {ride.paymentStatus ? (ride.paymentStatus.charAt(0).toUpperCase() + ride.paymentStatus.slice(1)) : 'Paid'}
                                         </span>
                                       </div>
                                     </div>

@@ -34,7 +34,7 @@ export interface Ride {
   harshBrakeEvents: number;
   behaviorDiscount: number; // discount given to customer for bad driving
   finalFare: number;
-  paymentMethod: 'UPI' | 'Wallet' | 'Card';
+  paymentMethod: 'UPI' | 'Wallet' | 'Card' | 'GooglePay' | 'PhonePe' | 'Paytm' | 'BHIM' | 'AmazonPay' | 'Razorpay' | 'Stripe' | 'Cash';
   status: 'booked' | 'assigned' | 'pickup' | 'en_route' | 'arrived' | 'completed' | 'cancelled';
   driverId?: string;
   driverName?: string;
@@ -49,7 +49,9 @@ export interface Ride {
   createdAt: string;
   completedAt?: string;
   rating?: number;
-  paymentStatus?: 'Pending' | 'Paid' | 'Disputed';
+  paymentStatus?: 'Pending' | 'Paid' | 'Disputed' | 'pending' | 'processing' | 'paid' | 'failed';
+  paymentReference?: string;
+  paidAt?: string;
   
   // Live Telemetry
   gpsLat: number;
@@ -76,6 +78,33 @@ export interface Ride {
   windSpeed?: number;
   weatherMultiplier?: number;
   rainChance?: number;
+
+  // SOS Safety integration
+  isSilentSOS?: boolean;
+  hasActiveSOS?: boolean;
+}
+
+export interface SOSAlert {
+  id: string;
+  rideId: string;
+  riderId: string;
+  riderName: string;
+  driverId: string;
+  driverName: string;
+  vehicleNumber: string;
+  reason: string;
+  riderLocation: {
+    lat: number;
+    lng: number;
+  };
+  driverLocation: {
+    lat: number;
+    lng: number;
+  };
+  status: 'active' | 'investigating' | 'resolved' | 'false_alarm';
+  severity: 'low' | 'medium' | 'high';
+  isSilentSOS?: boolean;
+  createdAt: string;
 }
 
 export interface Dispute {
@@ -114,6 +143,7 @@ interface DatabaseSchema {
   disputes: Dispute[];
   config: SystemConfig;
   alerts: AlertLog[];
+  sosAlerts: SOSAlert[];
 }
 
 const DB_FILE = path.join(process.cwd(), 'zipride_db.json');
@@ -126,7 +156,8 @@ const INITIAL_DB: DatabaseSchema = {
     weather: 'Clear',
     traffic: 'Light'
   },
-  alerts: []
+  alerts: [],
+  sosAlerts: []
 };
 
 class FileDatabase {
@@ -175,6 +206,9 @@ class FileDatabase {
         }
         if (!this.data.alerts) {
           this.data.alerts = [];
+        }
+        if (!this.data.sosAlerts) {
+          this.data.sosAlerts = [];
         }
       } else {
         this.save();
@@ -256,6 +290,23 @@ class FileDatabase {
     this.save();
   }
 
+  public getSosAlerts(): SOSAlert[] {
+    if (!this.data.sosAlerts) this.data.sosAlerts = [];
+    return this.data.sosAlerts;
+  }
+
+  public addSosAlert(sos: SOSAlert) {
+    if (!this.data.sosAlerts) this.data.sosAlerts = [];
+    this.data.sosAlerts.push(sos);
+    this.save();
+  }
+
+  public updateSosAlert(updatedSosAlert: SOSAlert) {
+    if (!this.data.sosAlerts) this.data.sosAlerts = [];
+    this.data.sosAlerts = this.data.sosAlerts.map(s => s.id === updatedSosAlert.id ? updatedSosAlert : s);
+    this.save();
+  }
+
   public addAlert(alert: AlertLog) {
     this.data.alerts.unshift(alert); // Add to beginning of alerts stream
     if (this.data.alerts.length > 200) {
@@ -270,7 +321,8 @@ class FileDatabase {
       rides: [],
       disputes: [],
       config: { weather: 'Clear', traffic: 'Light' },
-      alerts: []
+      alerts: [],
+      sosAlerts: []
     };
     this.save();
   }

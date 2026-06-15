@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Activity, 
   CheckCircle2, 
@@ -49,6 +49,20 @@ export default function DashboardView({
   const [localWeather, setLocalWeather] = useState<SystemConfig['weather']>(config.weather);
   const [localTraffic, setLocalTraffic] = useState<SystemConfig['traffic']>(config.traffic);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [liveWeather, setLiveWeather] = useState<{ temp: number; weatherText: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/weather?lat=19.0760&lng=72.8777')
+      .then(res => res.json())
+      .then(data => {
+        if (active) {
+          setLiveWeather({ temp: data.temp, weatherText: data.weatherText });
+        }
+      })
+      .catch(err => console.error('Dashboard weather load error:', err));
+    return () => { active = false; };
+  }, []);
 
   const handleConfigSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +88,47 @@ export default function DashboardView({
   };
 
   const currentLimits = getLimits(config.weather);
+
+  const todayStr = new Date().toDateString();
+  const getRevenueToday = () => {
+    return allRides
+      .filter(r => {
+        const isPaid = (r.paymentStatus || '').toLowerCase() === 'paid';
+        if (!isPaid) return false;
+        if (r.paidAt) return new Date(r.paidAt).toDateString() === todayStr;
+        if (r.completedAt) return new Date(r.completedAt).toDateString() === todayStr;
+        return false;
+      })
+      .reduce((sum, r) => sum + r.finalFare, 0);
+  };
+
+  const pendingPaymentsCount = allRides.filter(r => 
+    r.status === 'completed' && 
+    ['pending', 'processing', 'failed', 'Pending', 'failed', 'processing'].includes(r.paymentStatus || '')
+  ).length;
+
+  const successfulPaymentsCount = allRides.filter(r => (r.paymentStatus || '').toLowerCase() === 'paid').length;
+
+  const paidRides = allRides.filter(r => (r.paymentStatus || '').toLowerCase() === 'paid');
+  const totalPaidCount = paidRides.length;
+
+  const getMethodStats = (method: string) => {
+    if (totalPaidCount === 0) return { count: 0, pct: 0 };
+    const count = paidRides.filter(r => r.paymentMethod === method).length;
+    const pct = Math.round((count / totalPaidCount) * 100);
+    return { count, pct };
+  };
+
+  const gpayStats = getMethodStats('GooglePay');
+  const phonepeStats = getMethodStats('PhonePe');
+  const paytmStats = getMethodStats('Paytm');
+  const bhimStats = getMethodStats('BHIM');
+  const amazonpayStats = getMethodStats('AmazonPay');
+  const cashStats = getMethodStats('Cash');
+  const upiStats = getMethodStats('UPI');
+  
+  const othersCount = totalPaidCount - (gpayStats.count + phonepeStats.count + paytmStats.count + bhimStats.count + amazonpayStats.count + cashStats.count + upiStats.count);
+  const othersPct = totalPaidCount > 0 ? Math.round((othersCount / totalPaidCount) * 100) : 0;
 
   if (userRole === 'admin') {
     return (
@@ -107,47 +162,53 @@ export default function DashboardView({
           </div>
         </div>
 
-        {/* KPI: Completed Rides */}
-        <div id="kpi-completed" className="bg-theme-card border border-theme-border rounded-2xl p-5 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        {/* KPI: Successful Payments */}
+        <div id="kpi-paid-rides" className="bg-theme-card border border-theme-border rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-550/15 text-emerald-600 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Completed Rides</p>
-            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">{completedCount}</h3>
+            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Successful Payments</p>
+            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">
+              {successfulPaymentsCount}
+            </h3>
           </div>
         </div>
 
-        {/* KPI: Revenue Pool */}
+        {/* KPI: Revenue Today */}
         <div id="kpi-revenue" className="bg-theme-card border border-theme-border rounded-2xl p-5 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center shrink-0">
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Settled Revenue</p>
-            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">₹{revenue.toFixed(2)}</h3>
+            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Revenue Today</p>
+            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">
+              ₹{getRevenueToday().toFixed(2)}
+            </h3>
           </div>
         </div>
 
-        {/* KPI: Overspeed Violations */}
+        {/* KPI: Pending Payments */}
+        <div id="kpi-pending-payments" className="bg-theme-card border border-theme-border rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+            <Clock className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Pending Payments</p>
+            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">
+              {pendingPaymentsCount}
+            </h3>
+          </div>
+        </div>
+
+        {/* KPI: Safety Alerts */}
         <div id="kpi-overspeed" className="bg-theme-card border border-theme-border rounded-2xl p-5 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
             <Gauge className="w-6 h-6 animate-bounce" />
           </div>
           <div>
-            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Overspeed Risks</p>
-            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">{overspeedCount}</h3>
-          </div>
-        </div>
-
-        {/* KPI: Harsh Braking Warnings */}
-        <div id="kpi-braking" className="bg-theme-card border border-theme-border rounded-2xl p-5 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-6 h-6 text-yellow-500" />
-          </div>
-          <div>
-            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Harsh Braking</p>
-            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">{harshBrakeCount}</h3>
+            <p className="text-xs font-mono font-medium tracking-wide uppercase text-theme-text-secondary">Safety Alerts</p>
+            <h3 className="text-2xl font-bold text-theme-text-primary font-mono mt-0.5">{overspeedCount + harshBrakeCount}</h3>
           </div>
         </div>
       </div>
@@ -336,9 +397,7 @@ export default function DashboardView({
                 <tbody className="divide-y divide-theme-border/85">
                   {allRides.map((ride) => {
                     const ratingValue = ride.rating;
-                    const paymentStatusValue = ride.paymentStatus || (
-                      ride.status === 'completed' ? 'Paid' : 'Pending'
-                    );
+                    const paymentStatusValue = (ride.paymentStatus || 'pending').toLowerCase();
 
                     return (
                       <tr key={ride.id} className="hover:bg-theme-bg/30 transition duration-150">
@@ -360,11 +419,11 @@ export default function DashboardView({
                           </span>
                         </td>
                         <td className="px-6 py-4.5 text-center">
-                          {paymentStatusValue === 'Disputed' ? (
-                            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-200/50">
+                          {paymentStatusValue === 'disputed' ? (
+                            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-200/50 font-bold">
                               Disputed
                             </span>
-                          ) : paymentStatusValue === 'Paid' ? (
+                          ) : paymentStatusValue === 'paid' ? (
                             <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-teal-50 text-teal-600 font-bold">
                               Paid
                             </span>
@@ -451,6 +510,95 @@ export default function DashboardView({
           <div className="p-4 border-t border-slate-900 bg-slate-950/90 text-[10px] font-mono text-theme-text-secondary flex justify-between items-center">
             <span>Buffer Limit: 200 Logs</span>
             <span className="text-brand-emerald">Automatic Flush Active</span>
+          </div>
+        </div>
+
+        {/* Payment Method Analytics Section */}
+        <div className="lg:col-span-12 bg-theme-card border border-theme-border rounded-3xl p-6 shadow-sm mt-6">
+          <div className="flex items-center gap-2 mb-4 border-b border-theme-border pb-3">
+            <TrendingUp className="w-5 h-5 text-brand-emerald" />
+            <h3 className="font-bold text-theme-text-primary text-base">Payment Method Analytics</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+            
+            {/* Summary statistics */}
+            <div className="space-y-4 col-span-1 border-r border-theme-border pr-6">
+              <div>
+                <span className="text-[10px] text-theme-text-secondary font-mono uppercase block">Revenue Today</span>
+                <span className="text-2xl font-black text-theme-text-primary font-mono">₹{getRevenueToday().toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-theme-text-secondary font-mono uppercase block">Successful Payments</span>
+                <span className="text-xl font-bold text-emerald-600 font-mono">{successfulPaymentsCount}</span>
+              </div>
+              <div>
+                <span className="text-[10px] text-theme-text-secondary font-mono uppercase block">Pending Payments</span>
+                <span className="text-xl font-bold text-amber-600 font-mono">{pendingPaymentsCount}</span>
+              </div>
+            </div>
+
+            {/* Distribution bars */}
+            <div className="col-span-3 space-y-3.5">
+              <span className="block text-[11px] font-mono font-bold uppercase tracking-wider text-theme-text-secondary">App Share Distribution</span>
+              
+              {/* Google Pay */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-theme-text-primary flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Google Pay</span>
+                  <span className="font-mono">{gpayStats.pct}% ({gpayStats.count})</span>
+                </div>
+                <div className="w-full bg-theme-bg rounded-full h-2">
+                  <div className="bg-blue-500 h-2 rounded-full transition-all duration-500" style={{ width: `${gpayStats.pct}%` }} />
+                </div>
+              </div>
+
+              {/* PhonePe */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-theme-text-primary flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-purple-500" /> PhonePe</span>
+                  <span className="font-mono">{phonepeStats.pct}% ({phonepeStats.count})</span>
+                </div>
+                <div className="w-full bg-theme-bg rounded-full h-2">
+                  <div className="bg-purple-500 h-2 rounded-full transition-all duration-500" style={{ width: `${phonepeStats.pct}%` }} />
+                </div>
+              </div>
+
+              {/* Paytm */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-theme-text-primary flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> Paytm</span>
+                  <span className="font-mono">{paytmStats.pct}% ({paytmStats.count})</span>
+                </div>
+                <div className="w-full bg-theme-bg rounded-full h-2">
+                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500" style={{ width: `${paytmStats.pct}%` }} />
+                </div>
+              </div>
+
+              {/* BHIM */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-theme-text-primary flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> BHIM</span>
+                  <span className="font-mono">{bhimStats.pct}% ({bhimStats.count})</span>
+                </div>
+                <div className="w-full bg-theme-bg rounded-full h-2">
+                  <div className="bg-orange-500 h-2 rounded-full transition-all duration-500" style={{ width: `${bhimStats.pct}%` }} />
+                </div>
+              </div>
+
+              {/* Amazon Pay & Others combined */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-theme-text-primary flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-500" /> Others (Amazon Pay, Cash, UPI)</span>
+                  <span className="font-mono">{(amazonpayStats.pct + cashStats.pct + upiStats.pct + othersPct)}% ({amazonpayStats.count + cashStats.count + upiStats.count + othersCount})</span>
+                </div>
+                <div className="w-full bg-theme-bg rounded-full h-2">
+                  <div className="bg-gray-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(amazonpayStats.pct + cashStats.pct + upiStats.pct + othersPct)}%` }} />
+                </div>
+              </div>
+
+            </div>
+
           </div>
         </div>
 
@@ -543,7 +691,9 @@ export default function DashboardView({
           </div>
           <div>
             <span className="text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider block font-mono">Weather</span>
-            <span className="text-xs font-bold text-theme-text-primary block mt-0.5">{config.weather}</span>
+            <span className="text-xs font-bold text-theme-text-primary block mt-0.5">
+              {liveWeather ? `${liveWeather.temp}°C (${liveWeather.weatherText})` : config.weather}
+            </span>
           </div>
         </div>
 

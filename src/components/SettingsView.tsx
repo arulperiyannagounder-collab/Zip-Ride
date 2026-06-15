@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, Sun, Moon, Laptop, MapPin, Plus, Trash2, LogOut, ShieldCheck } from 'lucide-react';
+import { User, Sun, Moon, Laptop, MapPin, Plus, Trash2, LogOut, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { useToast } from './ToastNotification';
 
 interface SavedLocation {
   id: string;
@@ -16,8 +17,12 @@ interface SettingsViewProps {
 }
 
 export default function SettingsView({ currentUser, currentUserRole, onLogout, theme, onThemeChange }: SettingsViewProps) {
+  const { showToast } = useToast();
   const [name, setName] = useState(currentUser || 'Saran');
   const [phone, setPhone] = useState('9876543210');
+  
+  const [emergencyName, setEmergencyName] = useState(() => localStorage.getItem('zipride_emergency_name') || 'Police Control Room');
+  const [emergencyPhone, setEmergencyPhone] = useState(() => localStorage.getItem('zipride_emergency_phone') || '112');
   
   const [savedLocs, setSavedLocs] = useState<SavedLocation[]>(() => {
     const saved = localStorage.getItem('zipride_saved_locations');
@@ -100,6 +105,53 @@ export default function SettingsView({ currentUser, currentUserRole, onLogout, t
                   className="w-full bg-theme-bg border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary font-mono mt-1 font-semibold" 
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Safety & Emergency Contact Card */}
+          <div className="bg-theme-card border border-theme-border rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 shrink-0">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-theme-text-primary text-base">Safety SOS Setup</h3>
+                <p className="text-[10px] text-theme-text-secondary">Emergency contact for SOS alerts</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-3 border-t border-theme-border text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider font-mono">Contact Name</label>
+                <input 
+                  type="text" 
+                  value={emergencyName} 
+                  onChange={(e) => setEmergencyName(e.target.value)}
+                  placeholder="e.g. Police, Spouse, Parent"
+                  className="w-full bg-theme-bg border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-rose-500 font-semibold mt-1" 
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-theme-text-secondary uppercase tracking-wider font-mono">Contact Phone</label>
+                <input 
+                  type="text" 
+                  value={emergencyPhone} 
+                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  placeholder="e.g. 112 or 10-digit number"
+                  className="w-full bg-theme-bg border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary font-mono mt-1 font-semibold" 
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('zipride_emergency_name', emergencyName);
+                  localStorage.setItem('zipride_emergency_phone', emergencyPhone);
+                  showToast('Emergency contact saved successfully!', 'success');
+                }}
+                className="w-full py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
+              >
+                Save Contact
+              </button>
             </div>
           </div>
 

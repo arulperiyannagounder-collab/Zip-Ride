@@ -425,6 +425,7 @@ apiRouter.post('/rides', asyncWrapper(async (req: Request, res: Response) => {
     behaviorDiscount: 0,
     finalFare: initialFare,
     paymentMethod,
+    paymentStatus: 'pending',
     status: 'booked',
     createdAt: new Date().toISOString(),
     
@@ -674,6 +675,36 @@ apiRouter.post('/rides/:id/complete', (req: Request, res: Response) => {
   res.json(ride);
 });
 
+// 9.2 POST PAY RIDE
+apiRouter.post('/rides/:id/pay', (req: Request, res: Response) => {
+  const rides = db.getRides();
+  const ride = rides.find(r => r.id === req.params.id);
+  if (!ride) {
+    res.status(404).json({ error: 'Ride not found' });
+    return;
+  }
+  const { paymentReference, paymentMethod, paymentStatus } = req.body;
+  ride.paymentStatus = paymentStatus || 'paid';
+  ride.paymentMethod = paymentMethod || 'UPI';
+  ride.paymentReference = paymentReference || `REF-${Math.floor(100000 + Math.random() * 900000)}`;
+  if (ride.paymentStatus === 'paid') {
+    ride.paidAt = new Date().toISOString();
+  }
+
+  db.updateRide(ride);
+
+  db.addAlert({
+    id: `EVT-PAY-${Date.now()}`,
+    rideId: ride.id,
+    type: 'info',
+    message: `Payment successful for ride ${ride.id}. Reference: ${ride.paymentReference}. Amount: ₹${ride.finalFare}.`,
+    severity: 'info',
+    timestamp: new Date().toISOString()
+  });
+
+  res.json(ride);
+});
+
 // 9.5 POST RATE RIDE
 apiRouter.post('/rides/:id/rate', (req: Request, res: Response) => {
   const rides = db.getRides();
@@ -818,13 +849,47 @@ apiRouter.get('/alerts', (req: Request, res: Response) => {
 
 // 14. POST GEMINI REAL-TIME GROUNDED ASSISTANT
 apiRouter.post('/gemini/assist', asyncWrapper(async (req: Request, res: Response) => {
-  const { question, history } = req.body;
+  const { question, history, currentUser, role } = req.body;
   if (!question) {
     res.status(400).json({ error: 'A user question query is required.' });
     return;
   }
 
-  const answer = await askGeminiAssist(question, history || []);
+  // Build dynamic context based on database records if currentUser is passed
+  let context = '';
+  if (currentUser) {
+    const rides = db.getRides();
+    const activeStatuses = ['booked', 'accepted', 'assigned', 'pickup', 'en_route', 'arrived', 'anomaly', 'in_progress'];
+    const activeRide = rides.find(r => {
+      const isCompletedAndUnpaid = r.status === 'completed' && r.paymentStatus !== 'paid';
+      if (role === 'driver') {
+        return r.driverName === currentUser && activeStatuses.includes(r.status);
+      }
+      return r.riderName === currentUser && (activeStatuses.includes(r.status) || isCompletedAndUnpaid);
+    });
+
+    const sysConfig = db.getConfig();
+    context = `System Weather configuration: ${sysConfig.weather}, Traffic: ${sysConfig.traffic}. Current user: ${currentUser}, Role: ${role || 'passenger'}.`;
+    
+    if (activeRide) {
+      context += `\nActive Ride:\n` +
+        `- Ride ID: ${activeRide.id}\n` +
+        `- Pickup: ${activeRide.pickup}\n` +
+        `- Drop: ${activeRide.drop}\n` +
+        `- Status: ${activeRide.status}\n` +
+        `- Driver Name: ${activeRide.driverName || 'None assigned'}\n` +
+        `- Rider Name: ${activeRide.riderName || 'Saran'}\n` +
+        `- Vehicle Type: ${activeRide.vehicleType || 'Bike'}\n` +
+        `- Dynamic Fare: Initial ₹${activeRide.initialFare}, Final charged ₹${activeRide.finalFare}\n` +
+        `- Speed: ${activeRide.speed} km/h\n` +
+        `- Safety Score: ${activeRide.safetyScore}%\n` +
+        `- Overspeed Events: ${activeRide.overspeedEvents}, Harsh Braking: ${activeRide.harshBrakeEvents}\n` +
+        `- Payment Status: ${activeRide.paymentStatus || 'Pending'}\n` +
+        `- Active SOS Flag: ${activeRide.hasActiveSOS ? 'YES' : 'NO'}`;
+    }
+  }
+
+  const answer = await askGeminiAssist(question, history || [], context);
   res.json({ answer });
 }));
 
@@ -1239,4 +1304,184 @@ apiRouter.post('/rides/:id/adjustment/respond', (req: Request, res: Response) =>
 
   db.updateRide(ride);
   res.json(ride);
+});
+
+// 21. SOS ENDPOINTS
+apiRouter.post('/emergency/trigger', (req: Request, res: Response) => {
+  const { rideId, reason, isSilentSOS } = req.body;
+  const rides = db.getRides();
+  const ride = rides.find(r => r.id === rideId);
+  if (!ride) {
+    res.status(404).json({ error: 'Ride not found' });
+    return;
+  }
+
+  const allSosAlerts = db.getSosAlerts();
+  const riderName = ride.riderName || 'Saran';
+  const riderAlerts = allSosAlerts.filter(a => a.riderName === riderName);
+  const sosCountPerUser = riderAlerts.length + 1;
+
+  let severity: 'low' | 'medium' | 'high' = 'high';
+  if (['Vehicle Breakdown', 'Other Emergency'].includes(reason)) {
+    severity = 'medium';
+  } else if (['Feeling Unsafe', 'Wrong Route'].includes(reason)) {
+    severity = 'high';
+  }
+
+  const sosAlert = {
+    id: `SOS-${Math.floor(10000 + Math.random() * 90000)}`,
+    rideId: ride.id,
+    riderId: ride.riderId || 'USR-SARAN',
+    riderName: riderName,
+    driverId: ride.driverId || 'DRV001',
+    driverName: ride.driverName || 'Rajesh Kumar',
+    vehicleNumber: ride.driverVehicle || 'MH-02-AB-1234',
+    reason: reason || 'Feeling Unsafe',
+    riderLocation: {
+      lat: ride.riderLat || 19.0760,
+      lng: ride.riderLng || 72.8777
+    },
+    driverLocation: {
+      lat: ride.driverLat || 19.0765,
+      lng: ride.driverLng || 72.8780
+    },
+    status: 'active' as const,
+    severity,
+    isSilentSOS: !!isSilentSOS,
+    createdAt: new Date().toISOString()
+  };
+
+  ride.isSilentSOS = !!isSilentSOS;
+  ride.hasActiveSOS = true;
+  db.updateRide(ride);
+
+  db.addSosAlert(sosAlert);
+
+  db.addAlert({
+    id: `ALRT-SOS-${Date.now()}`,
+    rideId: ride.id,
+    type: 'safety',
+    message: isSilentSOS 
+      ? `🚨 Silent SOS triggered by rider! Status: ACTIVE. Severity: HIGH.`
+      : `🚨 Emergency SOS triggered! Reason: ${reason}. Driver alerted.`,
+    severity: 'critical',
+    timestamp: new Date().toISOString()
+  });
+
+  res.json({ sosAlert, sosCountPerUser });
+});
+
+apiRouter.post('/sos', (req: Request, res: Response) => {
+  const { rideId, reason, isSilentSOS } = req.body;
+  const rides = db.getRides();
+  const ride = rides.find(r => r.id === rideId);
+  if (!ride) {
+    res.status(404).json({ error: 'Ride not found' });
+    return;
+  }
+
+  const allSosAlerts = db.getSosAlerts();
+  const riderName = ride.riderName || 'Saran';
+  const riderAlerts = allSosAlerts.filter(a => a.riderName === riderName);
+  const sosCountPerUser = riderAlerts.length + 1;
+
+  let severity: 'low' | 'medium' | 'high' = 'high';
+  if (['Vehicle Breakdown', 'Other Emergency'].includes(reason)) {
+    severity = 'medium';
+  } else if (['Feeling Unsafe', 'Wrong Route'].includes(reason)) {
+    severity = 'high';
+  }
+
+  const sosAlert = {
+    id: `SOS-${Math.floor(10000 + Math.random() * 90000)}`,
+    rideId: ride.id,
+    riderId: ride.riderId || 'USR-SARAN',
+    riderName: riderName,
+    driverId: ride.driverId || 'DRV001',
+    driverName: ride.driverName || 'Rajesh Kumar',
+    vehicleNumber: ride.driverVehicle || 'MH-02-AB-1234',
+    reason: reason || 'Feeling Unsafe',
+    riderLocation: {
+      lat: ride.riderLat || 19.0760,
+      lng: ride.riderLng || 72.8777
+    },
+    driverLocation: {
+      lat: ride.driverLat || 19.0765,
+      lng: ride.driverLng || 72.8780
+    },
+    status: 'active' as const,
+    severity,
+    isSilentSOS: !!isSilentSOS,
+    createdAt: new Date().toISOString()
+  };
+
+  ride.isSilentSOS = !!isSilentSOS;
+  ride.hasActiveSOS = true;
+  db.updateRide(ride);
+
+  db.addSosAlert(sosAlert);
+
+  db.addAlert({
+    id: `ALRT-SOS-${Date.now()}`,
+    rideId: ride.id,
+    type: 'safety',
+    message: isSilentSOS 
+      ? `🚨 Silent SOS triggered by rider! Status: ACTIVE. Severity: HIGH.`
+      : `🚨 Emergency SOS triggered! Reason: ${reason}. Driver alerted.`,
+    severity: 'critical',
+    timestamp: new Date().toISOString()
+  });
+
+  res.json({ sosAlert, sosCountPerUser });
+});
+
+apiRouter.get('/sos', (req: Request, res: Response) => {
+  res.json(db.getSosAlerts());
+});
+
+apiRouter.get('/sos/:id', (req: Request, res: Response) => {
+  const alerts = db.getSosAlerts();
+  const alert = alerts.find(a => a.id === req.params.id);
+  if (!alert) {
+    res.status(404).json({ error: 'SOS alert not found' });
+    return;
+  }
+  res.json(alert);
+});
+
+apiRouter.patch('/sos/:id', (req: Request, res: Response) => {
+  const alerts = db.getSosAlerts();
+  const alert = alerts.find(a => a.id === req.params.id);
+  if (!alert) {
+    res.status(404).json({ error: 'SOS alert not found' });
+    return;
+  }
+  const { status } = req.body;
+  if (!['active', 'investigating', 'resolved', 'false_alarm'].includes(status)) {
+    res.status(400).json({ error: 'Invalid status' });
+    return;
+  }
+
+  alert.status = status;
+  db.updateSosAlert(alert);
+
+  if (['resolved', 'false_alarm'].includes(status)) {
+    const rides = db.getRides();
+    const ride = rides.find(r => r.id === alert.rideId);
+    if (ride) {
+      ride.hasActiveSOS = false;
+      db.updateRide(ride);
+    }
+  }
+
+  db.addAlert({
+    id: `ALRT-SOS-UPD-${Date.now()}`,
+    rideId: alert.rideId,
+    type: 'safety',
+    message: `SOS alert ${alert.id} status updated to: ${status.toUpperCase()}.`,
+    severity: status === 'resolved' ? 'info' : 'medium',
+    timestamp: new Date().toISOString()
+  });
+
+  res.json(alert);
 });

@@ -87,7 +87,8 @@ Rider's Filed Dispute Complaint: "${rideSummary.userStateReason}"`;
  */
 export async function askGeminiAssist(
   question: string,
-  history: { role: 'user' | 'model'; parts: { text: string }[] }[]
+  history: { role: 'user' | 'model'; parts: { text: string }[] }[],
+  context?: string
 ): Promise<string> {
   const systemInstruction = `You are the ZipRide Operations and Safety Support Agent. You guide riders, drivers, and ops managers with extreme safety compliance expertise.
 Rely on ZipRide's explicit policy parameters:
@@ -125,13 +126,15 @@ Be helpful, professional, scannable, and extremely clear. Do not cite fake formu
       parts: [{ text: h.parts[0].text }]
     }));
 
+    const contents = [
+      { role: 'user' as const, parts: [{ text: systemInstruction + (context ? `\n\nActive State Grounding Context:\n${context}` : "") }] },
+      ...pastChats,
+      { role: 'user' as const, parts: [{ text: question }] }
+    ];
+
     const response = await client.models.generateContent({
       model: "gemini-3.5-flash",
-      contents: [
-        { role: 'user', parts: [{ text: systemInstruction }] },
-        ...pastChats,
-        { role: 'user', parts: [{ text: question }] }
-      ],
+      contents,
       config: {
         temperature: 0.5,
       }

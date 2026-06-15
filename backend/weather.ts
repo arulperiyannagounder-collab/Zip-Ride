@@ -11,6 +11,10 @@ interface WeatherData {
   weatherMultiplier: number;
   weatherFactor: number;
   rainChance: number;
+  temperature: number;
+  condition: string;
+  windKph: number;
+  isDay: boolean;
 }
 
 interface WeatherCacheEntry {
@@ -40,7 +44,11 @@ export const getWeatherData = async (lat: number, lng: number): Promise<WeatherD
     humidity: 55,
     weatherMultiplier: 1.0,
     weatherFactor: 0,
-    rainChance: 0
+    rainChance: 0,
+    temperature: 28,
+    condition: 'Clear',
+    windKph: 10,
+    isDay: true
   };
 
   if (!WEATHER_API_KEY) {
@@ -61,6 +69,7 @@ export const getWeatherData = async (lat: number, lng: number): Promise<WeatherD
     const windSpeed = data.current?.wind_kph ?? fallback.windSpeed;
     const humidity = data.current?.humidity ?? fallback.humidity;
     const rainChance = data.forecast?.forecastday?.[0]?.day?.daily_chance_of_rain ?? fallback.rainChance;
+    const isDay = data.current?.is_day === 1;
 
     // Map weather conditions to surcharges and multipliers
     let weatherMultiplier = 1.0;
@@ -85,7 +94,11 @@ export const getWeatherData = async (lat: number, lng: number): Promise<WeatherD
       humidity,
       weatherMultiplier,
       weatherFactor,
-      rainChance
+      rainChance,
+      temperature: temp,
+      condition: weatherText,
+      windKph: windSpeed,
+      isDay
     };
 
     weatherCache[cacheKey] = {
