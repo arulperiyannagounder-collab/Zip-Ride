@@ -111,9 +111,9 @@ export default function App() {
       return r.driverName === currentUser && (activeStatuses.includes(r.status) || isCompletedAndPendingDriverSettle);
     }
     if (currentUserRole === 'passenger') {
-      return r.riderName === currentUser && (activeStatuses.includes(r.status) || isCompletedAndUnpaid);
+      return r.riderName === currentUser && (activeStatuses.includes(r.status) || r.status === 'completed' || r.status === 'cancelled');
     }
-    return activeStatuses.includes(r.status) || isCompletedAndUnpaid;
+    return activeStatuses.includes(r.status) || r.status === 'completed' || r.status === 'cancelled';
   }) || null;
 
   console.log("Current Rides:", allRides);

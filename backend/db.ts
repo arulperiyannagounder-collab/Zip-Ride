@@ -46,6 +46,9 @@ export interface Ride {
   riderPhone?: string;
   riderLat?: number;
   riderLng?: number;
+  riderId?: string;
+  driverLat?: number;
+  driverLng?: number;
   createdAt: string;
   completedAt?: string;
   rating?: number;
