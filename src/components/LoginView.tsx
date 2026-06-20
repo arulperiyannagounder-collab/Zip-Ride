@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, Bike, Scale, Send, Check, MapPin, Navigation, ArrowRight, Smartphone, Mail, Heart, Accessibility, ShieldAlert, User, RefreshCw } from 'lucide-react';
+import { Shield, Bike, Scale, Send, Check, MapPin, Navigation, ArrowRight, Smartphone, Mail, Heart, Accessibility, ShieldAlert, User, RefreshCw, IndianRupee } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Driver } from '../types';
 import { ZipRideRepository } from '../services/dbInterface';
@@ -870,17 +870,51 @@ export default function LoginView({
   onLogout,
   drivers 
 }: LoginViewProps) {
-  const [fullName, setFullName] = useState('Arul');
-  const [phoneNumber, setPhoneNumber] = useState('9876543210');
-  const [emailAddress, setEmailAddress] = useState('arul@zipride.com');
-  const [password, setPassword] = useState('••••••••');
+  const [fullName, setFullName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [emailAddress, setEmailAddress] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<'rider' | 'driver'>('rider');
   const [vehicleType, setVehicleType] = useState<'Bike' | 'Auto' | 'Cab'>('Bike');
   const [vehicleNumber, setVehicleNumber] = useState('TN-09-XX-8822');
   const [showingOTP, setShowingOTP] = useState(false);
+
+  const [savedAccounts, setSavedAccounts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('zipride_saved_accounts');
+    if (saved) {
+      try {
+        setSavedAccounts(JSON.parse(saved));
+      } catch (e) {
+        console.error('Error parsing saved accounts:', e);
+      }
+    }
+  }, []);
+
+  const handleSavedAccountSelect = (acc: any) => {
+    setFullName(acc.name);
+    setRole(acc.role);
+    if (acc.phone) {
+      const cleanPhone = acc.phone.replace('+91 ', '').replace('+91', '').trim();
+      setPhoneNumber(cleanPhone);
+    }
+    if (acc.email) {
+      setEmailAddress(acc.email);
+    }
+    if (acc.password) {
+      setPassword(acc.password);
+    }
+    if (acc.loginMethod) {
+      setLoginMethod(acc.loginMethod);
+    } else {
+      setLoginMethod(acc.phone ? 'mobile' : 'email');
+    }
+  };
   const [generatedOTP, setGeneratedOTP] = useState('');
   const [enteredOTP, setEnteredOTP] = useState('');
   const [showingAgreement, setShowingAgreement] = useState(false);
+  const [activeModalPolicy, setActiveModalPolicy] = useState<'fare' | 'ride' | 'user' | null>(null);
   const [showingLocationSetup, setShowingLocationSetup] = useState(false);
   const [latitude, setLatitude] = useState('13.0827');
   const [longitude, setLongitude] = useState('80.2707');
@@ -1185,6 +1219,26 @@ export default function LoginView({
           } else {
             const finalPhone = loginMethod === 'mobile' ? phoneNumber : '9876543210';
             const formattedPhone = finalPhone.startsWith('+91') ? finalPhone : `+91 ${finalPhone}`;
+            
+            try {
+              const saved = localStorage.getItem('zipride_saved_accounts');
+              let accounts: any[] = saved ? JSON.parse(saved) : [];
+              const exists = accounts.some(acc => acc.phone === formattedPhone && acc.role === 'rider');
+              if (!exists) {
+                accounts.push({
+                  name: fullName,
+                  phone: formattedPhone,
+                  email: emailAddress || `${fullName.toLowerCase().replace(/\s+/g, '')}@zipride.com`,
+                  role: 'rider',
+                  password: password,
+                  loginMethod: loginMethod
+                });
+                localStorage.setItem('zipride_saved_accounts', JSON.stringify(accounts));
+              }
+            } catch (e) {
+              console.error(e);
+            }
+
             triggerSuccessTransition(fullName, 'rider', formattedPhone);
           }
         } else {
@@ -1237,6 +1291,26 @@ export default function LoginView({
     setSubmitStatusText('Configuring safety metadata...');
     setTimeout(() => {
       ZipRideRepository.saveProfile(profileData);
+      
+      try {
+        const saved = localStorage.getItem('zipride_saved_accounts');
+        let accounts: any[] = saved ? JSON.parse(saved) : [];
+        const exists = accounts.some(acc => acc.phone === formattedPhone && acc.role === 'rider');
+        if (!exists) {
+          accounts.push({
+            name: fullName,
+            phone: formattedPhone,
+            email: profileData.email,
+            role: 'rider',
+            password: password,
+            loginMethod: loginMethod
+          });
+          localStorage.setItem('zipride_saved_accounts', JSON.stringify(accounts));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
       setShowingProfileWizard(false);
       setIsSubmitting(false);
       triggerSuccessTransition(fullName, 'rider', formattedPhone);
@@ -1299,6 +1373,25 @@ export default function LoginView({
 
       if (!response.ok) {
         throw new Error('Failed to register driver profile on the server.');
+      }
+
+      try {
+        const saved = localStorage.getItem('zipride_saved_accounts');
+        let accounts: any[] = saved ? JSON.parse(saved) : [];
+        const exists = accounts.some(acc => acc.phone === formattedPhone && acc.role === 'driver');
+        if (!exists) {
+          accounts.push({
+            name: fullName,
+            phone: formattedPhone,
+            email: `${fullName.toLowerCase().replace(/\s+/g, '')}@zipride.com`,
+            role: 'driver',
+            password: password,
+            loginMethod: 'mobile'
+          });
+          localStorage.setItem('zipride_saved_accounts', JSON.stringify(accounts));
+        }
+      } catch (e) {
+        console.error(e);
       }
 
       triggerSuccessTransition(fullName, 'driver', formattedPhone);
@@ -1374,7 +1467,7 @@ export default function LoginView({
   return (
     <motion.div
       animate={phase === 'riding-off' && showFlashOverlay ? { opacity: 0.9 } : { opacity: 1 }}
-      className="w-screen h-screen relative bg-[#010618] overflow-hidden select-none"
+      className="dark w-screen h-screen relative bg-[#010618] overflow-hidden select-none"
     >
       <CityscapeBackground phase={phase} />
 
@@ -1635,7 +1728,7 @@ export default function LoginView({
                         onChange={(e) => setLatitude(e.target.value)}
                         placeholder="13.0827"
                         whileFocus={{ scale: 1.01, boxShadow: "0 0 15px rgba(0, 200, 150, 0.25)" }}
-                        className="w-full px-4 py-3 bg-theme-input-bg/40 border border-theme-border focus:border-[#00C896] focus:ring-2 focus:ring-[#00C896]/20 transition-all rounded-xl text-sm transition outline-none font-mono text-white"
+                        className="w-full px-4 py-3 bg-theme-input-bg/40 border border-theme-border focus:border-[#00C896] focus:ring-2 focus:ring-[#00C896]/20 transition-all rounded-xl text-sm transition outline-none font-mono text-theme-text-primary"
                       />
                     </div>
                     <div>
@@ -1646,7 +1739,7 @@ export default function LoginView({
                         onChange={(e) => setLongitude(e.target.value)}
                         placeholder="80.2707"
                         whileFocus={{ scale: 1.01, boxShadow: "0 0 15px rgba(0, 200, 150, 0.25)" }}
-                        className="w-full px-4 py-3 bg-theme-input-bg/40 border border-theme-border focus:border-[#00C896] focus:ring-2 focus:ring-[#00C896]/20 transition-all rounded-xl text-sm transition outline-none font-mono text-white"
+                        className="w-full px-4 py-3 bg-theme-input-bg/40 border border-theme-border focus:border-[#00C896] focus:ring-2 focus:ring-[#00C896]/20 transition-all rounded-xl text-sm transition outline-none font-mono text-theme-text-primary"
                       />
                     </div>
                   </div>
@@ -1770,14 +1863,14 @@ export default function LoginView({
             {!isLoggedIn && showingAgreement && !showingOTP && !showingLocationSetup && (
               <div className="space-y-6">
                 <div className="text-center space-y-2">
-                  <div className="mx-auto w-12 h-12 bg-emerald-955/20 rounded-2xl flex items-center justify-center border border-[#00C896]/30">
+                  <div className="mx-auto w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center border border-[#00C896]/30">
                     <Scale className="w-6 h-6 text-[#00C896]" />
                   </div>
                   <h3 className="text-xl font-bold text-theme-text-primary tracking-tight">Fairness Agreement</h3>
                   <p className="text-xs text-theme-text-secondary">Please review and accept before continuing</p>
                 </div>
 
-                <div className="bg-theme-input-bg/30 p-4 rounded-2xl border border-theme-border/40 space-y-3">
+                <div className="bg-theme-input-bg border border-theme-border/80 p-5 rounded-2xl space-y-4 shadow-sm">
                   {[
                     "I will treat my driver with respect and dignity.",
                     "I will pay the locked fare digitally — no cash, no haggling.",
@@ -1785,18 +1878,39 @@ export default function LoginView({
                     "I understand fares are transparent and never surge.",
                     "Disputes will be raised through the in-app dispute flow only."
                   ].map((item, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-[#00C896] shrink-0 mt-0.5" strokeWidth={3} />
-                      <span className="text-[12px] text-theme-text-secondary font-semibold leading-normal">{item}</span>
+                    <div key={i} className="flex items-start gap-3 text-left">
+                      <div className="w-5 h-5 rounded-full bg-emerald-55 dark:bg-[#00C896]/10 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-200 dark:border-[#00C896]/20">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#00C896]" strokeWidth={3.5} />
+                      </div>
+                      <span className="text-[13.5px] text-theme-text-primary font-bold leading-relaxed">{item}</span>
                     </div>
                   ))}
+                </div>
+
+                <div className="text-center text-[11px] text-theme-text-secondary font-semibold">
+                  Review the complete{' '}
+                  <button 
+                    type="button"
+                    onClick={() => setActiveModalPolicy('ride')} 
+                    className="text-emerald-600 dark:text-[#00C896] hover:underline font-bold cursor-pointer"
+                  >
+                    Ride Policy
+                  </button>{' '}
+                  and{' '}
+                  <button 
+                    type="button"
+                    onClick={() => setActiveModalPolicy('user')} 
+                    className="text-emerald-600 dark:text-[#00C896] hover:underline font-bold cursor-pointer"
+                  >
+                    User Agreement
+                  </button>.
                 </div>
 
                 <motion.button
                   onClick={handleAcceptAgreement}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full py-3.5 bg-[#00C896] hover:bg-[#00b384] text-slate-950 font-black rounded-xl text-[14px] flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="w-full py-3.5 bg-[#00C896] hover:bg-[#00b384] text-slate-950 font-black rounded-xl text-[14px] flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-emerald-400/10"
                 >
                   <Check className="w-4.5 h-4.5" strokeWidth={3} />
                   <span>I Accept & Agree</span>
@@ -1825,7 +1939,7 @@ export default function LoginView({
                         value={age} 
                         onChange={(e) => setAge(parseInt(e.target.value) || 26)}
                         whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                        className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
+                        className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
                       />
                     </div>
                     <div>
@@ -1834,11 +1948,11 @@ export default function LoginView({
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
                         whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                        className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1 cursor-pointer"
+                        className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1 cursor-pointer"
                       >
-                        <option value="Male" className="bg-theme-input-bg">Male</option>
-                        <option value="Female" className="bg-theme-input-bg">Female</option>
-                        <option value="Other" className="bg-theme-input-bg">Other</option>
+                        <option value="Male" className="bg-theme-input-bg text-theme-text-primary">Male</option>
+                        <option value="Female" className="bg-theme-input-bg text-theme-text-primary">Female</option>
+                        <option value="Other" className="bg-theme-input-bg text-theme-text-primary">Other</option>
                       </motion.select>
                     </div>
                   </div>
@@ -1857,7 +1971,7 @@ export default function LoginView({
                           onChange={(e) => setGuardianName(e.target.value)}
                           placeholder="Name"
                           whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
+                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
                         />
                       </div>
                       <div>
@@ -1868,7 +1982,7 @@ export default function LoginView({
                           onChange={(e) => setGuardianRelationship(e.target.value)}
                           placeholder="Spouse, Parent"
                           whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
+                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
                         />
                       </div>
                       <div className="col-span-2">
@@ -1879,7 +1993,7 @@ export default function LoginView({
                           onChange={(e) => setGuardianPhone(e.target.value)}
                           placeholder="+91 9444102938"
                           whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1 font-mono" 
+                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1 font-mono" 
                         />
                       </div>
                     </div>
@@ -1899,7 +2013,7 @@ export default function LoginView({
                           onChange={(e) => setBloodGroup(e.target.value)}
                           placeholder="O+"
                           whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
+                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
                         />
                       </div>
                       <div>
@@ -1910,7 +2024,7 @@ export default function LoginView({
                           onChange={(e) => setPreferredHospital(e.target.value)}
                           placeholder="Apollo Hospital"
                           whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
+                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
                         />
                       </div>
                       <div className="col-span-2">
@@ -1921,7 +2035,7 @@ export default function LoginView({
                           onChange={(e) => setAllergies(e.target.value)}
                           placeholder="Penicillin, Nuts, None"
                           whileFocus={{ scale: 1.02, boxShadow: "0 0 12px rgba(99,102,241,0.25)" }}
-                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
+                          className="w-full bg-theme-input-bg/40 border border-theme-border px-3 py-2 rounded-xl text-theme-text-primary outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 transition-all font-semibold mt-1" 
                         />
                       </div>
                       <div className="col-span-2 flex items-center gap-4 mt-2 bg-theme-input-bg/30 p-2.5 rounded-xl border border-theme-border/50">
@@ -1930,7 +2044,7 @@ export default function LoginView({
                             type="checkbox"
                             checked={asthma}
                             onChange={(e) => setAsthma(e.target.checked)}
-                            className="rounded text-rose-500 focus:ring-rose-500 bg-slate-900 border-theme-border w-4 h-4 cursor-pointer"
+                            className="rounded text-rose-500 focus:ring-rose-500 bg-theme-input-bg border-theme-border w-4 h-4 cursor-pointer"
                           />
                           <span className="font-semibold text-theme-text-primary">Asthma</span>
                         </label>
@@ -1939,7 +2053,7 @@ export default function LoginView({
                             type="checkbox"
                             checked={diabetes}
                             onChange={(e) => setDiabetes(e.target.checked)}
-                            className="rounded text-rose-500 focus:ring-rose-500 bg-slate-900 border-theme-border w-4 h-4 cursor-pointer"
+                            className="rounded text-rose-500 focus:ring-rose-500 bg-theme-input-bg border-theme-border w-4 h-4 cursor-pointer"
                           />
                           <span className="font-semibold text-theme-text-primary">Diabetes</span>
                         </label>
@@ -1962,7 +2076,7 @@ export default function LoginView({
                       ].map(option => {
                         const isChecked = accessibilityRequirements.includes(option.id);
                         return (
-                          <label key={option.id} className="flex items-center gap-2 p-2 bg-theme-input-bg/30 rounded-lg cursor-pointer hover:bg-slate-900/50 border border-theme-border/50">
+                          <label key={option.id} className="flex items-center gap-2 p-2 bg-theme-input-bg/30 rounded-lg cursor-pointer hover:bg-theme-hover-bg border border-theme-border/50">
                             <motion.input 
                               type="checkbox"
                               checked={isChecked}
@@ -1971,7 +2085,7 @@ export default function LoginView({
                                   prev.includes(option.id) ? prev.filter(x => x !== option.id) : [...prev, option.id]
                                 );
                               }}
-                              className="rounded text-indigo-500 focus:ring-indigo-500 bg-slate-900 border-theme-border w-3.5 h-3.5 cursor-pointer"
+                              className="rounded text-indigo-500 focus:ring-indigo-500 bg-theme-input-bg border-theme-border w-3.5 h-3.5 cursor-pointer"
                             />
                             <span className="text-[11px] font-semibold text-theme-text-secondary">{option.label}</span>
                           </label>
@@ -2030,6 +2144,32 @@ export default function LoginView({
                     I'm a Driver
                   </motion.button>
                 </div>
+
+                {/* Previously Logged In Accounts Selector */}
+                {savedAccounts.filter(acc => acc.role === role).length > 0 && (
+                  <div className="bg-theme-input-bg/30 border border-theme-border/60 p-3.5 rounded-2xl space-y-2">
+                    <label className="block text-[9px] font-bold tracking-wider text-theme-text-secondary uppercase">
+                      Previously Logged In Accounts
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {savedAccounts
+                        .filter(acc => acc.role === role)
+                        .map((acc, idx) => (
+                          <motion.button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSavedAccountSelect(acc)}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-theme-border bg-theme-card hover:border-[#00C896] text-theme-text-primary text-[11px] font-bold cursor-pointer transition duration-150"
+                          >
+                            <User className="w-3.5 h-3.5 text-[#00C896] shrink-0" />
+                            <span>{acc.name}</span>
+                          </motion.button>
+                        ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Login Method Tabs */}
                 {role === 'rider' && (
@@ -2237,12 +2377,139 @@ export default function LoginView({
                   </motion.button>
                 </div>
 
+                 <div className="text-center text-[10.5px] text-theme-text-secondary pt-3 mt-3 border-t border-theme-border/60">
+                  By logging in, you agree to our{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveModalPolicy('fare')}
+                    className="text-emerald-600 dark:text-[#00C896] hover:underline font-bold cursor-pointer"
+                  >
+                    Fare Policy
+                  </button>,{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveModalPolicy('ride')}
+                    className="text-emerald-600 dark:text-[#00C896] hover:underline font-bold cursor-pointer"
+                  >
+                    Ride Policy
+                  </button>, and{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveModalPolicy('user')}
+                    className="text-emerald-600 dark:text-[#00C896] hover:underline font-bold cursor-pointer"
+                  >
+                    User Agreement
+                  </button>.
+                </div>
+
                 <div className="flex items-center justify-center gap-2 text-xs text-slate-500 pt-5 mt-5 border-t border-theme-border font-sans">
                   <Shield className="w-4 h-4 text-[#00C896]" />
                   <span className="font-semibold">Secured by ZipRide Cryptography Gate</span>
                 </div>
               </div>
             )}
+
+            {/* POLICY MODAL OVERLAY */}
+            <AnimatePresence>
+              {activeModalPolicy && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                  onClick={() => setActiveModalPolicy(null)}
+                >
+                  <motion.div
+                    initial={{ scale: 0.95, y: 15 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.95, y: 15 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full max-w-lg bg-theme-card border border-theme-border rounded-3xl p-6 shadow-2xl space-y-4 max-h-[80vh] overflow-y-auto"
+                  >
+                    <div className="flex items-center justify-between border-b border-theme-border pb-3">
+                      <div className="flex items-center gap-2">
+                        {activeModalPolicy === 'fare' && <IndianRupee className="w-5 h-5 text-emerald-600 dark:text-[#00C896]" />}
+                        {activeModalPolicy === 'ride' && <Shield className="w-5 h-5 text-emerald-600 dark:text-[#00C896]" />}
+                        {activeModalPolicy === 'user' && <Scale className="w-5 h-5 text-indigo-500" />}
+                        <h3 className="text-base font-bold text-theme-text-primary uppercase tracking-wide">
+                          {activeModalPolicy === 'fare' && 'Fare Policy Summary'}
+                          {activeModalPolicy === 'ride' && 'Ride Safety Policy'}
+                          {activeModalPolicy === 'user' && 'User Agreement'}
+                        </h3>
+                      </div>
+                      <button
+                        onClick={() => setActiveModalPolicy(null)}
+                        className="p-1 rounded-lg hover:bg-theme-input-bg text-theme-text-secondary hover:text-theme-text-primary transition cursor-pointer font-bold text-xs"
+                      >
+                        ✕ Close
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 text-xs leading-relaxed text-theme-text-secondary">
+                      {activeModalPolicy === 'fare' && (
+                        <div className="space-y-3">
+                          <p className="text-theme-text-primary font-bold">
+                            ZipRide offers transparent pricing pre-calculated on verified environmental variables. Surge pricing is strictly capped.
+                          </p>
+                          <div className="space-y-2 font-semibold">
+                            <div className="flex justify-between border-b border-theme-border pb-1 text-theme-text-primary">
+                              <span>Base Dispatch Fare</span>
+                              <span>₹20.00</span>
+                            </div>
+                            <div className="flex justify-between border-b border-theme-border pb-1 text-theme-text-primary">
+                              <span>Distance Charge</span>
+                              <span>₹12.00 / km</span>
+                            </div>
+                            <div className="flex justify-between border-b border-theme-border pb-1 text-theme-text-primary">
+                              <span>Commute Duration Cost</span>
+                              <span>₹1.50 / min</span>
+                            </div>
+                          </div>
+                          <p>
+                            Surcharges are automatically adjusted based on dynamic weather parameters (+₹10 to +₹50 base fee) and traffic multipliers (1.1x to 1.5x max coefficient). Safe driving refunds are applied instantly for G-force stops and speeding.
+                          </p>
+                        </div>
+                      )}
+
+                      {activeModalPolicy === 'ride' && (
+                        <div className="space-y-3">
+                          <p className="text-theme-text-primary font-bold">
+                            Safety is our core objective. Both riders and pilots must adhere to safety compliance rules.
+                          </p>
+                          <ul className="list-disc pl-4 space-y-2 font-medium">
+                            <li><strong className="text-theme-text-primary">OTP Verification:</strong> Verify pilot registration details and vehicle plate number before giving the security OTP.</li>
+                            <li><strong className="text-theme-text-primary">Maneuver Rules:</strong> Do not request speeding or dangerous driving stunts. Pilots are legally instructed to reject illegal requests.</li>
+                            <li><strong className="text-theme-text-primary">Live Monitoring:</strong> Active route coordinates are tracked. Deviations alert safety desks immediately.</li>
+                            <li><strong className="text-theme-text-primary">Emergency Support:</strong> Tap the SOS icon to alert PCR control rooms and emergency medical networks.</li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {activeModalPolicy === 'user' && (
+                        <div className="space-y-3">
+                          <p className="text-theme-text-primary font-bold">
+                            Your account access is conditioned on compliance with our code of conduct:
+                          </p>
+                          <ul className="list-decimal pl-4 space-y-2 font-medium font-semibold">
+                            <li><strong className="text-theme-text-primary">Respect & Safety:</strong> Verbal abuse or aggressive behaviour towards pilots results in permanent ban.</li>
+                            <li><strong className="text-theme-text-primary">Digital-Only Settlement:</strong> Fares must be paid digitally. Cash negotiations or driver tip extortion are strictly prohibited.</li>
+                            <li><strong className="text-theme-text-primary">Resolution Flow:</strong> Dispute coordinates and fares only through the in-app dispute panel. Offline side settlements are invalid.</li>
+                            <li><strong className="text-theme-text-primary">Telemetry Authorization:</strong> ZipRide is authorized to log telemetry coordinates during active trips for safety and compliance.</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setActiveModalPolicy(null)}
+                      className="w-full py-2.5 bg-[#00C896] hover:bg-[#00b384] text-slate-950 font-black rounded-xl text-xs transition cursor-pointer"
+                    >
+                      Acknowledge & Close
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

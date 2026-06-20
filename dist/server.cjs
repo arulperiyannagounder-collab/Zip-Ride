@@ -176,6 +176,13 @@ var FileDatabase = class {
     }
     this.save();
   }
+  clearRides() {
+    this.data.rides = [];
+    this.data.disputes = [];
+    this.data.alerts = [];
+    this.data.sosAlerts = [];
+    this.save();
+  }
   clearAll() {
     this.data = {
       drivers: [...INITIAL_DB.drivers],
@@ -1123,6 +1130,11 @@ apiRouter.post("/driver/status", (req, res) => {
   } else {
     res.status(404).json({ error: "Driver not found." });
   }
+});
+apiRouter.post("/rides/clear", (req, res) => {
+  db.reload();
+  db.clearRides();
+  res.json({ success: true });
 });
 apiRouter.get("/rides", (req, res) => {
   db.reload();

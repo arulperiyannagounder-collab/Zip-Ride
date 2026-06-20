@@ -500,6 +500,10 @@ export default function App() {
     window.history.pushState(null, '', path);
     setCurrentPath(path);
     setMobileMenuOpen(false);
+    window.scrollTo({
+      top: 0,
+      behavior: "instant"
+    });
   };
 
   // Sync state when back/forward history buttons are clicked
@@ -510,6 +514,21 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  const handleClearAllTrips = async () => {
+    try {
+      const res = await fetch('/api/rides/clear', { method: 'POST' });
+      if (res.ok) {
+        setAllRides([]);
+        showToast('All trip history cleared successfully!', 'success');
+      } else {
+        showToast('Failed to clear trip history.', 'error');
+      }
+    } catch (e) {
+      console.warn('Error clearing trips:', e);
+      showToast('Error clearing trip history.', 'error');
+    }
+  };
 
   const handleLoginSuccess = (email: string, role: 'passenger' | 'driver' | 'admin' | 'rider', phone?: string) => {
     const normalizedRole = role === 'rider' ? 'passenger' : role;
@@ -545,7 +564,7 @@ export default function App() {
       case '/tracker': return 'Ride Safety Tracker';
       case '/road-intel': return 'Community Road Intelligence';
       case '/disputes': return 'Disputes & Resolutions';
-      case '/fares': return 'Fare Policy & Multipliers';
+      case '/fares': return 'Policies & Agreements';
       case '/history': return 'Ride History';
       case '/settings': return 'Account Settings';
       case '/ai-assistant': return 'AI Operations Assistant';
@@ -623,7 +642,7 @@ export default function App() {
                   { path: '/', label: 'Dashboard' },
                   { path: '/booking', label: 'Book a Ride' },
                   { path: '/tracker', label: 'Ride Tracker' },
-                  { path: '/fares', label: 'Fare Policy' },
+                  { path: '/fares', label: 'Policies & Agreements' },
                   { path: '/history', label: 'Ride History' },
                   { path: '/settings', label: 'Settings' }
                 ];
@@ -639,7 +658,7 @@ export default function App() {
                   { path: '/tracker', label: 'Ride Tracker' },
                   { path: '/driver', label: 'Driver Console' },
                   { path: '/disputes', label: 'Disputes' },
-                  { path: '/fares', label: 'Fare Policy' },
+                  { path: '/fares', label: 'Policies & Agreements' },
                   { path: '/history', label: 'Ride History' },
                   { path: '/settings', label: 'Settings' }
                 ];
@@ -682,6 +701,7 @@ export default function App() {
               isLoading={isLoading}
               userRole={currentUserRole}
               userName={currentUser}
+              onClearTrips={handleClearAllTrips}
             />
           )}
 

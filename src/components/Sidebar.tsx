@@ -41,7 +41,7 @@ export default function Sidebar({ activeTab, onSelectTab, userRole }: SidebarPro
         { path: '/booking', label: 'Book Ride', icon: MapPin },
         { path: '/tracker', label: 'Ride Tracker', icon: Navigation },
         { path: '/road-intel', label: 'Road Intelligence', icon: ShieldAlert },
-        { path: '/fares', label: 'Fare Policy', icon: IndianRupee },
+        { path: '/fares', label: 'Policies & Agreements', icon: IndianRupee },
         { path: '/history', label: 'Ride History', icon: History },
         { path: '/settings', label: 'Settings', icon: Settings },
       ];
@@ -59,7 +59,7 @@ export default function Sidebar({ activeTab, onSelectTab, userRole }: SidebarPro
         { path: '/driver', label: 'Driver Console', icon: Bike },
         { path: '/disputes', label: 'Disputes', icon: Flag },
         { path: '/road-intel', label: 'Road Intelligence', icon: ShieldAlert },
-        { path: '/fares', label: 'Fare Policy', icon: IndianRupee },
+        { path: '/fares', label: 'Policies & Agreements', icon: IndianRupee },
         { path: '/history', label: 'Ride History', icon: History },
         { path: '/settings', label: 'Settings', icon: Settings },
       ];

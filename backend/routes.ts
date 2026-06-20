@@ -269,6 +269,13 @@ apiRouter.post('/driver/status', (req: Request, res: Response) => {
   }
 });
 
+// Clear all rides (trips)
+apiRouter.post('/rides/clear', (req: Request, res: Response) => {
+  db.reload();
+  db.clearRides();
+  res.json({ success: true });
+});
+
 // 4. GET ALL RIDES
 apiRouter.get('/rides', (req: Request, res: Response) => {
   db.reload();

@@ -24,7 +24,7 @@ import {
   Heart,
   Send
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { SystemState, Ride, SystemConfig } from '../types';
 import { ZipRideRepository } from '../services/dbInterface';
 import RideMatePanel from './RideMatePanel';
@@ -89,6 +89,7 @@ interface DashboardViewProps {
   isLoading: boolean;
   userRole?: 'passenger' | 'driver' | 'admin' | null;
   userName?: string | null;
+  onClearTrips?: () => Promise<void>;
 }
 
 export default function DashboardView({
@@ -99,9 +100,12 @@ export default function DashboardView({
   onRefresh,
   isLoading,
   userRole = 'passenger',
-  userName = 'Saran'
+  userName = 'Saran',
+  onClearTrips
 }: DashboardViewProps) {
   const { config, activeCount, completedCount, revenue, overspeedCount, harshBrakeCount, recentAlerts } = systemState;
+
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const [activeSubTab, setActiveSubTab] = useState<'overview' | 'road_intel'>('overview');
   const [localWeather, setLocalWeather] = useState<SystemConfig['weather']>(config.weather);
@@ -1037,13 +1041,23 @@ export default function DashboardView({
             <div className="bg-theme-card border border-theme-border rounded-3xl overflow-hidden shadow-xs">
               <div className="p-5 border-b border-theme-border flex items-center justify-between">
                 <h3 className="font-bold text-theme-text-primary text-sm uppercase tracking-wider font-mono">Recent Trips</h3>
-                <button 
-                  onClick={() => onSelectTab('/history')}
-                  className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <span>View All Trips</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-4">
+                  {completedRides.length > 0 && (
+                    <button
+                      onClick={() => setShowClearConfirm(true)}
+                      className="text-xs font-bold text-rose-500 hover:underline cursor-pointer"
+                    >
+                      Clear All Trips
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => onSelectTab('/history')}
+                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>View All Trips</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {completedRides.length > 0 ? (
@@ -1207,6 +1221,58 @@ export default function DashboardView({
           <RoadIntelligenceView />
         </div>
       )}
+
+      {/* TRIP CLEAR CONFIRMATION MODAL OVERLAY */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowClearConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm bg-theme-card border border-theme-border rounded-3xl p-6 shadow-2xl space-y-5 text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center text-rose-600 dark:text-rose-400 mx-auto">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-base font-bold text-theme-text-primary">Clear Trip History</h3>
+                <p className="text-xs text-theme-text-secondary leading-relaxed">
+                  Are you sure you want to clear all trip history? This action is permanent and cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 py-2.5 bg-theme-bg border border-theme-border text-theme-text-primary hover:bg-theme-hover-bg font-bold rounded-xl text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setShowClearConfirm(false);
+                    if (onClearTrips) {
+                      await onClearTrips();
+                    }
+                  }}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition cursor-pointer shadow-md shadow-rose-600/10"
+                >
+                  Clear
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

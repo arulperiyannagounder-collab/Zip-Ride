@@ -327,6 +327,14 @@ class FileDatabase {
     this.save();
   }
 
+  public clearRides() {
+    this.data.rides = [];
+    this.data.disputes = [];
+    this.data.alerts = [];
+    this.data.sosAlerts = [];
+    this.save();
+  }
+
   public clearAll() {
     this.data = {
       drivers: [...INITIAL_DB.drivers],
