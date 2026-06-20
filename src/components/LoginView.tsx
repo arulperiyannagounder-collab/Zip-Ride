@@ -1892,7 +1892,7 @@ export default function LoginView({
                     <Scale className="w-6 h-6 text-[#00C896]" />
                   </div>
                   <h3 className="text-xl font-bold text-theme-text-primary tracking-tight">Fairness Agreement</h3>
-                  <p className="text-xs text-theme-text-secondary">Please review and accept before continuing</p>
+                  <p className="text-xs text-slate-800 dark:text-slate-200 font-semibold">Please review and accept before continuing</p>
                 </div>
 
                 <div className="bg-theme-input-bg border border-theme-border/80 p-5 rounded-2xl space-y-4 shadow-sm">
@@ -1940,7 +1940,7 @@ export default function LoginView({
                     onChange={(e) => setAgreementChecked(e.target.checked)}
                     className="w-4 h-4 rounded border-theme-border text-emerald-600 bg-theme-input-bg focus:ring-[#00C896] focus:ring-offset-0 cursor-pointer mt-0.5"
                   />
-                  <label htmlFor="fairness-checkbox" className="text-xs text-theme-text-secondary font-medium leading-snug cursor-pointer">
+                  <label htmlFor="fairness-checkbox" className="text-xs text-slate-800 dark:text-slate-200 font-semibold leading-snug cursor-pointer">
                     I have read, understood, and agree to follow the <span className="font-bold text-theme-text-primary">Fairness Agreement</span>, <span className="font-bold text-theme-text-primary">Fare Policy</span>, and <span className="font-bold text-theme-text-primary">Ride Policy</span>.
                   </label>
                 </div>
@@ -2489,7 +2489,7 @@ export default function LoginView({
                       </button>
                     </div>
 
-                    <div className="space-y-4 text-xs leading-relaxed text-theme-text-secondary">
+                    <div className="space-y-4 text-xs leading-relaxed text-slate-800 dark:text-slate-200 font-semibold">
                       {activeModalPolicy === 'fare' && (
                         <div className="space-y-3">
                           <p className="text-theme-text-primary font-bold">
